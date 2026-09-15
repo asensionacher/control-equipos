@@ -1,0 +1,13 @@
+Quiero hacer un software de control de equipos de cualquier tipo. Debe ser una webapp completamente responsive. Debe tener:
+
+1. Registro de administradores
+2. Registro de jugadores
+3. El jugador debe poder ver su ficha con sus datos personales.
+4. El jugador puede registrarse por si mismo o su padre/madre/tutor legal puede registrarse y añadir jugadores que son gestionados por él a partir de un link que recibe.
+5. Se deben crear temporadas (como 2026/2027)
+6. Cada jugador puede asignarse a un equipo por temporada por el administrador
+7. Cada equipo se creará por temporada
+8. El administrador es quien crea el jugador y manda el link para crear el usuario del padre/jugador si no existe o para que el padre se añada ese jugador a si mismo, ya que puede tener más de un jugador asignado.
+9. Debe usar postgresql
+10. El admin debe poder asignar jugadores de forma masiva a un equipo
+11. El admin debe poder buscar jugadores tanto por año de nacimiento como por nombre y/o apellido

@@ -1,0 +1,222 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USUARIOS Y AUTENTICACIÓN
+// ============================================
+
+enum Rol {
+  ADMIN
+  USUARIO
+}
+
+model Usuario {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String?
+  nombre        String
+  apellidos     String
+  telefono      String?
+  rol           Rol       @default(USUARIO)
+  emailVerificado Boolean @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relaciones
+  tutorias                 Tutoria[]        @relation("TutorUsuarios")
+  jugadorComoUsuario        Jugador?         @relation("JugadorComoUsuario")
+  invitacionesCreadas       Invitacion[]     @relation("AdminCreadorInvitacion")
+  invitacionesRecibidas     Invitacion[]     @relation("UsuarioInvitado")
+  passwordResetTokens       PasswordResetToken[]
+  pendingRegistrationsCreadas PendingRegistration[] @relation("AdminCreadorPendingReg")
+}
+
+// ============================================
+// JUGADORES
+// ============================================
+
+enum Sexo {
+  MASCULINO
+  FEMENINO
+  OTRO
+}
+
+model Jugador {
+  id            String    @id @default(cuid())
+  nombre        String
+  apellidos     String
+  fechaNacimiento DateTime
+  dniNie        String?   @unique
+  email         String?
+  telefono      String?
+  direccion     String?
+  fotoUrl       String?
+  sexo          Sexo?
+
+  // Si el jugador es adulto y tiene cuenta propia, este campo apunta a su Usuario.
+  // En ese caso, los datos personales del jugador (nombre, apellidos, email, teléfono)
+  // son los del Usuario. La sincronización se hace al editar el perfil.
+  // Si no tiene cuenta propia, los datos están directamente en este registro.
+  usuario       Usuario?  @relation("JugadorComoUsuario", fields: [usuarioId], references: [id], onDelete: SetNull)
+  usuarioId     String?   @unique
+
+  activo        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relaciones
+  tutorias      Tutoria[]
+  asignaciones  AsignacionEquipo[]
+  invitaciones  Invitacion[]
+  pendingRegistrations PendingRegistration[]
+
+  @@index([apellidos, nombre])
+  @@index([fechaNacimiento])
+}
+
+// Tabla intermedia: un Jugador puede tener varios Usuarios como tutores/padres.
+// Un mismo Usuario puede ser tutor de varios Jugadores (sus hijos).
+model Tutoria {
+  id            String    @id @default(cuid())
+  jugador       Jugador   @relation(fields: [jugadorId], references: [id], onDelete: Cascade)
+  jugadorId     String
+  usuario       Usuario   @relation("TutorUsuarios", fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId     String
+
+  parentesco    String?   // "Padre", "Madre", "Tutor legal", "Jugador titular"
+  esPrincipal   Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  @@unique([jugadorId, usuarioId])
+  @@index([usuarioId])
+}
+
+model Invitacion {
+  id            String    @id @default(cuid())
+  token         String    @unique @default(cuid())
+  emailDestino  String
+  tipo          String    // "REGISTRO" o "VINCULACION"
+  mensaje       String?
+
+  // Jugador al que se refiere la invitación
+  jugador       Jugador   @relation(fields: [jugadorId], references: [id], onDelete: Cascade)
+  jugadorId     String
+
+  // Admin que creó la invitación
+  creadaPor     Usuario   @relation("AdminCreadorInvitacion", fields: [creadaPorId], references: [id], onDelete: Cascade)
+  creadaPorId   String
+
+  // Usuario que aceptó la invitación (si ya existía)
+  usuarioAcepta Usuario?  @relation("UsuarioInvitado", fields: [usuarioAceptaId], references: [id], onDelete: SetNull)
+  usuarioAceptaId String?
+
+  expirada      Boolean   @default(false)
+  usada         Boolean   @default(false)
+  fechaUso      DateTime?
+  createdAt     DateTime  @default(now())
+  expiresAt     DateTime
+
+  @@index([token])
+  @@index([emailDestino])
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  token     String   @unique @default(cuid())
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuarioId String
+  usado     Boolean  @default(false)
+  fechaUso  DateTime?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([token])
+  @@index([usuarioId])
+}
+
+// Token para activar una cuenta recién creada (por el admin) o un jugador sin tutor.
+// El usuario aún no tiene passwordHash, debe introducirlo para activar la cuenta.
+model PendingRegistration {
+  id        String   @id @default(cuid())
+  token     String   @unique @default(cuid())
+  email     String   @unique
+  nombre    String
+  apellidos String
+  telefono  String?
+
+  // Si es una activación de un jugador que ya existe, guardamos su id.
+  jugador   Jugador? @relation(fields: [jugadorId], references: [id], onDelete: Cascade)
+  jugadorId String?
+  // Si es activación de un usuario nuevo que se vinculará a un jugador existente al activarse.
+  // (cuando el admin crea un jugador con un nuevo email para el padre y luego quiere que ese email sea la cuenta)
+  jugadorParaVincular String?
+
+  // Si viene de una creación de jugador por parte del admin, guardamos quién lo creó.
+  creadoPor   Usuario? @relation("AdminCreadorPendingReg", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  creadoPorId String?
+
+  usado       Boolean  @default(false)
+  fechaUso    DateTime?
+  expiresAt   DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([token])
+  @@index([email])
+}
+
+// ============================================
+// TEMPORADAS Y EQUIPOS
+// ============================================
+
+model Temporada {
+  id            String    @id @default(cuid())
+  nombre        String    @unique // "2026/2027"
+  fechaInicio   DateTime
+  fechaFin      DateTime
+  activa        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  equipos       Equipo[]
+}
+
+model Equipo {
+  id            String    @id @default(cuid())
+  nombre        String
+  categoria     String?   // "Benjamín", "Alevín", "Senior", etc.
+  descripcion   String?
+  urlLiga       String?   // URL a la página oficial de la federación/liga
+
+  temporada     Temporada @relation(fields: [temporadaId], references: [id], onDelete: Cascade)
+  temporadaId   String
+
+  activo        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  asignaciones  AsignacionEquipo[]
+
+  @@unique([nombre, temporadaId])
+  @@index([temporadaId])
+}
+
+model AsignacionEquipo {
+  id            String    @id @default(cuid())
+  jugador       Jugador   @relation(fields: [jugadorId], references: [id], onDelete: Cascade)
+  jugadorId     String
+  equipo        Equipo    @relation(fields: [equipoId], references: [id], onDelete: Cascade)
+  equipoId      String
+
+  fechaAsignacion DateTime @default(now())
+  createdAt     DateTime @default(now())
+
+  @@unique([jugadorId, equipoId])
+  @@index([equipoId])
+  @@index([jugadorId])
+}
