@@ -11,3 +11,5 @@ build/
 .turbo
 next-env.d.ts
 prisma/migrations/
+tsconfig.tsbuildinfo
+*.tsbuildinfo

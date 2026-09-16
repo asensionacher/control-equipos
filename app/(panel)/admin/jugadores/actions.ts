@@ -202,6 +202,31 @@ export async function editarJugador(
     },
   });
 
+  // Sincronizar datos personales con el Usuario vinculado (si tiene)
+  const jugadorActualizado = await prisma.jugador.findUnique({
+    where: { id },
+    select: { usuarioId: true },
+  });
+  if (jugadorActualizado?.usuarioId) {
+    await prisma.usuario.update({
+      where: { id: jugadorActualizado.usuarioId },
+      data: {
+        nombre: data.nombre,
+        apellidos: data.apellidos,
+        email: data.email || undefined,
+        telefono: data.telefono || null,
+      },
+    });
+    // Sincronizar también al Jugador desde Usuario (por si el helper debe prevalecer)
+    await prisma.jugador.update({
+      where: { id },
+      data: {
+        email: data.email || null,
+        telefono: data.telefono || null,
+      },
+    });
+  }
+
   // Actualizar tutor (relación Tutoria)
   const nuevaTutoriaId = data.tutorUsuarioId || null;
   const tutoriaActual = await prisma.tutoria.findFirst({
@@ -249,24 +274,47 @@ export async function editarJugadorTutor(
   const session = await auth();
   if (!session?.user) return { error: "No autorizado" };
 
-  // Verificar que el usuario es tutor del jugador
-  const tutoria = await prisma.tutoria.findFirst({
-    where: { jugadorId, usuarioId: session.user.id },
+  // Verificar que el usuario es tutor del jugador o es el propio jugador
+  const jugador = await prisma.jugador.findUnique({
+    where: { id: jugadorId },
+    include: {
+      tutorias: { where: { usuarioId: session.user.id } },
+    },
   });
-  if (!tutoria) return { error: "No autorizado" };
+  if (!jugador) return { error: "Jugador no encontrado" };
+
+  const esPropia = jugador.usuarioId === session.user.id;
+  const esTutor = jugador.tutorias.length > 0;
+  if (!esTutor && !esPropia) return { error: "No autorizado" };
+
+  // Sexo (campo hidden desde el Select)
+  const sexoRaw = formData.get("sexo");
+  const sexoValido = ["MASCULINO", "FEMENINO", "OTRO"].includes(sexoRaw as string)
+    ? (sexoRaw as "MASCULINO" | "FEMENINO" | "OTRO")
+    : undefined;
 
   const parsed = jugadorEditTutorSchema.safeParse({
     nombre: formData.get("nombre"),
     apellidos: formData.get("apellidos"),
     fechaNacimiento: formData.get("fechaNacimiento"),
+    dniNie: formData.get("dniNie") || "",
     email: formData.get("email") || "",
     telefono: formData.get("telefono") || "",
     direccion: formData.get("direccion") || "",
     fotoUrl: formData.get("fotoUrl") || "",
+    sexo: sexoValido,
   });
 
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  }
+
+  // Validar DNI único
+  if (parsed.data.dniNie) {
+    const dniEnUso = await prisma.jugador.findFirst({
+      where: { dniNie: parsed.data.dniNie, NOT: { id: jugadorId } },
+    });
+    if (dniEnUso) return { error: "Ya existe otro jugador con ese DNI/NIE" };
   }
 
   await prisma.jugador.update({
@@ -275,18 +323,32 @@ export async function editarJugadorTutor(
       nombre: parsed.data.nombre,
       apellidos: parsed.data.apellidos,
       fechaNacimiento: new Date(parsed.data.fechaNacimiento),
+      dniNie: parsed.data.dniNie || null,
       email: parsed.data.email || null,
       telefono: parsed.data.telefono || null,
       direccion: parsed.data.direccion || null,
       fotoUrl: parsed.data.fotoUrl || null,
-      // Campos protegidos (solo el admin los puede cambiar):
-      // - dniNie, sexo, tutorias
+      sexo: parsed.data.sexo,
     },
   });
 
+  // Si el jugador tiene Usuario propio, sincronizar los datos personales con ese Usuario
+  if (jugador.usuarioId) {
+    await prisma.usuario.update({
+      where: { id: jugador.usuarioId },
+      data: {
+        nombre: parsed.data.nombre,
+        apellidos: parsed.data.apellidos,
+        telefono: parsed.data.telefono || null,
+        // Email NO se sincroniza desde aquí (lo gestiona admin)
+      },
+    });
+  }
+
   revalidatePath(`/dashboard/jugadores/${jugadorId}`);
   revalidatePath("/dashboard");
-  return { success: "Datos actualizados correctamente" };
+  revalidatePath(`/admin/jugadores/${jugadorId}`);
+  return { success: "Datos del jugador actualizados correctamente" };
 }
 
 // ============================================

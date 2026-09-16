@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { calcularEdad, formatearFecha, iniciales } from "@/lib/utils";
 import { ArrowLeft, Pencil, ExternalLink } from "lucide-react";
 import Link from "next/link";
+import { getDatosPersonales } from "@/lib/jugador-sync";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -36,6 +37,8 @@ export default async function FichaJugadorUsuarioPage({ params }: PageProps) {
   const esPropia = jugador?.usuarioId === session.user.id;
   const esTutor = jugador?.tutorias && jugador.tutorias.length > 0;
   if (!jugador || (!esTutor && !esPropia)) notFound();
+
+  const datosPersonales = await getDatosPersonales(jugador.id);
 
   // Agrupar asignaciones por temporada para mostrar historial
   const asignacionesPorTemporada = new Map<
@@ -69,12 +72,16 @@ export default async function FichaJugadorUsuarioPage({ params }: PageProps) {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-4">
               <Avatar className="h-20 w-20">
-                {jugador.fotoUrl ? <AvatarImage src={jugador.fotoUrl} alt={jugador.nombre} /> : null}
-                <AvatarFallback className="text-lg">{iniciales(jugador.nombre, jugador.apellidos)}</AvatarFallback>
+                {jugador.fotoUrl ? (
+                  <AvatarImage src={jugador.fotoUrl} alt={datosPersonales.nombre} />
+                ) : null}
+                <AvatarFallback className="text-lg">
+                  {iniciales(datosPersonales.nombre, datosPersonales.apellidos)}
+                </AvatarFallback>
               </Avatar>
               <div>
                 <CardTitle className="text-2xl">
-                  {jugador.nombre} {jugador.apellidos}
+                  {datosPersonales.nombre} {datosPersonales.apellidos}
                 </CardTitle>
                 <CardDescription>
                   {calcularEdad(jugador.fechaNacimiento)} años · Nacido el {formatearFecha(jugador.fechaNacimiento)}
@@ -95,17 +102,18 @@ export default async function FichaJugadorUsuarioPage({ params }: PageProps) {
         <CardHeader>
           <CardTitle>Datos personales</CardTitle>
           <CardDescription>
-            Puedes editar todos los datos de la ficha del jugador desde el botón Editar.
+            Estos datos se sincronizan con tu perfil de usuario cuando aplica. Puedes editarlos
+            desde el botón Editar.
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <Campo label="Nombre completo" valor={`${jugador.nombre} ${jugador.apellidos}`} />
+          <Campo label="Nombre completo" valor={`${datosPersonales.nombre} ${datosPersonales.apellidos}`} />
           <Campo label="Fecha de nacimiento" valor={formatearFecha(jugador.fechaNacimiento)} />
           <Campo label="Edad" valor={`${calcularEdad(jugador.fechaNacimiento)} años`} />
           <Campo label="Sexo" valor={jugador.sexo ? jugador.sexo.toLowerCase() : null} />
           <Campo label="DNI/NIE" valor={jugador.dniNie} />
-          <Campo label="Email del jugador" valor={jugador.email} />
-          <Campo label="Teléfono del jugador" valor={jugador.telefono} />
+          <Campo label="Email" valor={datosPersonales.email} />
+          <Campo label="Teléfono" valor={datosPersonales.telefono} />
           <Campo label="Dirección" valor={jugador.direccion} className="sm:col-span-2" />
         </CardContent>
       </Card>

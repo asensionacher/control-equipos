@@ -39,7 +39,6 @@ export function JugadorEditTutorForm({ jugador }: Props) {
     e.preventDefault();
     setMsg(null);
     const formData = new FormData(e.currentTarget);
-    // Añadir el sexo como hidden (Select onValueChange actualiza el state)
     if (sexo) formData.set("sexo", sexo);
     startTransition(async () => {
       const result = await editarJugadorTutor(jugador.id, formData);
@@ -90,12 +89,7 @@ export function JugadorEditTutorForm({ jugador }: Props) {
             </div>
             <div className="space-y-2">
               <Label htmlFor="dniNie">DNI / NIE</Label>
-              <Input
-                id="dniNie"
-                name="dniNie"
-                defaultValue={jugador.dniNie ?? ""}
-                placeholder="12345678A"
-              />
+              <Input id="dniNie" name="dniNie" defaultValue={jugador.dniNie ?? ""} />
             </div>
           </div>
 
@@ -127,11 +121,14 @@ export function JugadorEditTutorForm({ jugador }: Props) {
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="email">Email del jugador</Label>
+              <Label htmlFor="email">Email</Label>
               <Input id="email" name="email" type="email" defaultValue={jugador.email ?? ""} />
+              <p className="text-xs text-muted-foreground">
+                El email de acceso a la cuenta se gestiona desde el perfil de usuario.
+              </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="telefono">Teléfono del jugador</Label>
+              <Label htmlFor="telefono">Teléfono</Label>
               <Input id="telefono" name="telefono" type="tel" defaultValue={jugador.telefono ?? ""} />
             </div>
           </div>

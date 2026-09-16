@@ -10,6 +10,7 @@ import Link from "next/link";
 import { ArrowLeft, UserPlus, Send } from "lucide-react";
 import { formatearFecha, iniciales } from "@/lib/utils";
 import { ReenviarActivacionButton } from "./reenviar-activacion-button";
+import { getDatosPersonales } from "@/lib/jugador-sync";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -167,32 +168,8 @@ export default async function FichaPadrePage({ params }: PageProps) {
                 const equipoActual = temporadaActiva
                   ? t.jugador.asignaciones.find((a) => a.equipo.temporadaId === temporadaActiva.id)
                   : null;
-                return (
-                  <Link
-                    key={t.id}
-                    href={`/admin/jugadores/${t.jugador.id}`}
-                    className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent"
-                  >
-                    <Avatar className="h-10 w-10">
-                      <AvatarFallback>
-                        {iniciales(t.jugador.nombre, t.jugador.apellidos)}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate font-medium">
-                        {t.jugador.nombre} {t.jugador.apellidos}
-                      </div>
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        {t.parentesco && <span>{t.parentesco}</span>}
-                        {equipoActual && (
-                          <Badge variant="secondary" className="text-xs">
-                            {equipoActual.equipo.nombre}
-                          </Badge>
-                        )}
-                      </div>
-                    </div>
-                  </Link>
-                );
+                // Datos sincronizados: si el jugador tiene Usuario propio, usamos esos
+                return <JugadorGestionadoCard key={t.id} jugadorId={t.jugador.id} tutoria={t} equipoActualNombre={equipoActual?.equipo.nombre ?? null} />;
               })}
             </div>
           )}
@@ -208,5 +185,41 @@ function Campo({ label, valor }: { label: string; valor: string | null | undefin
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div>{valor || <span className="text-muted-foreground">—</span>}</div>
     </div>
+  );
+}
+
+async function JugadorGestionadoCard({
+  jugadorId,
+  tutoria,
+  equipoActualNombre,
+}: {
+  jugadorId: string;
+  tutoria: { id: string; parentesco: string | null; jugador: { id: string; nombre: string; apellidos: string; fotoUrl: string | null } };
+  equipoActualNombre: string | null;
+}) {
+  const datos = await getDatosPersonales(jugadorId);
+  return (
+    <Link
+      href={`/admin/jugadores/${jugadorId}`}
+      className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent"
+    >
+      <Avatar className="h-10 w-10">
+        <AvatarFallback>{iniciales(datos.nombre, datos.apellidos)}</AvatarFallback>
+      </Avatar>
+      <div className="min-w-0 flex-1">
+        <div className="truncate font-medium">
+          {datos.nombre} {datos.apellidos}
+        </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          {tutoria.parentesco && <span>{tutoria.parentesco}</span>}
+          {datos.telefono && <span>· {datos.telefono}</span>}
+          {equipoActualNombre && (
+            <Badge variant="secondary" className="text-xs">
+              {equipoActualNombre}
+            </Badge>
+          )}
+        </div>
+      </div>
+    </Link>
   );
 }

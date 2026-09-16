@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { calcularEdad, formatearFecha, iniciales } from "@/lib/utils";
 import Link from "next/link";
 import { Users, UserCircle } from "lucide-react";
+import { getDatosPersonales } from "@/lib/jugador-sync";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export default async function DashboardUsuarioPage() {
   const session = await auth();
   if (!session?.user) redirect("/login");
 
-  const [misJugadores, jugadorPropio] = await Promise.all([
+  const [misJugadoresRaw, jugadorPropioRaw] = await Promise.all([
     prisma.jugador.findMany({
       where: { tutorias: { some: { usuarioId: session.user.id } }, activo: true },
       orderBy: { createdAt: "desc" },
@@ -35,6 +36,20 @@ export default async function DashboardUsuarioPage() {
     }),
   ]);
 
+  // Sincronizar datos personales para todos los jugadores que se muestran
+  const datosMisJugadores = await Promise.all(
+    misJugadoresRaw.map(async (j) => ({
+      jugador: j,
+      datos: await getDatosPersonales(j.id),
+    }))
+  );
+  const datosJugadorPropio = jugadorPropioRaw
+    ? {
+        jugador: jugadorPropioRaw,
+        datos: await getDatosPersonales(jugadorPropioRaw.id),
+      }
+    : null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -46,7 +61,7 @@ export default async function DashboardUsuarioPage() {
         </p>
       </div>
 
-      {jugadorPropio && (
+      {datosJugadorPropio && (
         <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-900">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -61,25 +76,32 @@ export default async function DashboardUsuarioPage() {
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <Avatar className="h-12 w-12">
-                  {jugadorPropio.fotoUrl ? (
-                    <AvatarImage src={jugadorPropio.fotoUrl} alt={jugadorPropio.nombre} />
+                  {datosJugadorPropio.jugador.fotoUrl ? (
+                    <AvatarImage src={datosJugadorPropio.jugador.fotoUrl} alt={datosJugadorPropio.datos.nombre} />
                   ) : null}
                   <AvatarFallback>
-                    {iniciales(jugadorPropio.nombre, jugadorPropio.apellidos)}
+                    {iniciales(datosJugadorPropio.datos.nombre, datosJugadorPropio.datos.apellidos)}
                   </AvatarFallback>
                 </Avatar>
                 <div>
                   <div className="font-medium">
-                    {jugadorPropio.nombre} {jugadorPropio.apellidos}
+                    {datosJugadorPropio.datos.nombre} {datosJugadorPropio.datos.apellidos}
                   </div>
                   <div className="text-xs text-muted-foreground">
-                    {calcularEdad(jugadorPropio.fechaNacimiento)} años · Nacido el{" "}
-                    {formatearFecha(jugadorPropio.fechaNacimiento)}
+                    {calcularEdad(datosJugadorPropio.jugador.fechaNacimiento)} años · Nacido el{" "}
+                    {formatearFecha(datosJugadorPropio.jugador.fechaNacimiento)}
                   </div>
+                  {datosJugadorPropio.datos.email && (
+                    <div className="text-xs text-muted-foreground">
+                      {datosJugadorPropio.datos.email}
+                    </div>
+                  )}
                 </div>
               </div>
               <Button asChild>
-                <Link href={`/dashboard/jugadores/${jugadorPropio.id}`}>Ver mi ficha completa</Link>
+                <Link href={`/dashboard/jugadores/${datosJugadorPropio.jugador.id}`}>
+                  Ver mi ficha completa
+                </Link>
               </Button>
             </div>
           </CardContent>
@@ -89,9 +111,9 @@ export default async function DashboardUsuarioPage() {
       <div>
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">
           <Users className="h-5 w-5" />
-          Jugadores que gestionas ({misJugadores.length})
+          Jugadores que gestionas ({datosMisJugadores.length})
         </h2>
-        {misJugadores.length === 0 ? (
+        {datosMisJugadores.length === 0 ? (
           <Card>
             <CardContent className="p-6 text-center text-sm text-muted-foreground">
               Aún no gestionas ningún jugador. Cuando un administrador te vincule a uno, aparecerá aquí.
@@ -99,17 +121,17 @@ export default async function DashboardUsuarioPage() {
           </Card>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {misJugadores.map((j) => (
+            {datosMisJugadores.map(({ jugador: j, datos }) => (
               <Card key={j.id} className="overflow-hidden">
                 <CardHeader className="pb-4">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-12 w-12">
-                      {j.fotoUrl ? <AvatarImage src={j.fotoUrl} alt={j.nombre} /> : null}
-                      <AvatarFallback>{iniciales(j.nombre, j.apellidos)}</AvatarFallback>
+                      {j.fotoUrl ? <AvatarImage src={j.fotoUrl} alt={datos.nombre} /> : null}
+                      <AvatarFallback>{iniciales(datos.nombre, datos.apellidos)}</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 flex-1">
                       <CardTitle className="truncate text-lg">
-                        {j.nombre} {j.apellidos}
+                        {datos.nombre} {datos.apellidos}
                       </CardTitle>
                       <CardDescription>{calcularEdad(j.fechaNacimiento)} años</CardDescription>
                     </div>

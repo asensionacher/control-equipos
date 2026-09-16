@@ -12,6 +12,7 @@ import { Pencil, Mail, Users, Trophy, ExternalLink, UserPlus } from "lucide-reac
 import { EliminarJugadorButton } from "./eliminar-button";
 import { AsignarEquipos } from "./asignar-equipos";
 import { CrearActivacionJugador } from "./crear-activacion-jugador";
+import { getDatosPersonales } from "@/lib/jugador-sync";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -42,6 +43,8 @@ export default async function FichaJugadorPage({ params }: PageProps) {
   });
 
   if (!jugador) notFound();
+
+  const datosPersonales = await getDatosPersonales(jugador.id);
 
   const temporadas = await prisma.temporada.findMany({
     where: { activa: true },
@@ -100,10 +103,16 @@ export default async function FichaJugadorPage({ params }: PageProps) {
           </Avatar>
           <div>
             <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
-              {jugador.nombre} {jugador.apellidos}
+              {datosPersonales.nombre} {datosPersonales.apellidos}
             </h1>
             <p className="text-sm text-muted-foreground">
               {calcularEdad(jugador.fechaNacimiento)} años · Nacido el {formatearFecha(jugador.fechaNacimiento)}
+              {datosPersonales.email && (
+                <> · <a href={`mailto:${datosPersonales.email}`} className="hover:underline">{datosPersonales.email}</a></>
+              )}
+              {datosPersonales.telefono && (
+                <> · {datosPersonales.telefono}</>
+              )}
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
               {jugador.usuario && (
@@ -158,12 +167,16 @@ export default async function FichaJugadorPage({ params }: PageProps) {
         <Card>
           <CardHeader>
             <CardTitle>Datos personales</CardTitle>
+            <CardDescription>
+              Datos sincronizados: si el jugador tiene cuenta propia, se muestran los datos de su Usuario.
+            </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
+            <Campo label="Nombre" valor={`${datosPersonales.nombre} ${datosPersonales.apellidos}`} />
             <Campo label="DNI/NIE" valor={jugador.dniNie} />
             <Campo label="Sexo" valor={jugador.sexo ? jugador.sexo.toLowerCase() : null} />
-            <Campo label="Email" valor={jugador.email} />
-            <Campo label="Teléfono" valor={jugador.telefono} />
+            <Campo label="Email" valor={datosPersonales.email} />
+            <Campo label="Teléfono" valor={datosPersonales.telefono} />
             <Campo label="Dirección" valor={jugador.direccion} />
           </CardContent>
         </Card>
