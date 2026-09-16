@@ -9,6 +9,8 @@ import { calcularEdad, formatearFecha, iniciales } from "@/lib/utils";
 import Link from "next/link";
 import { Users, UserCircle } from "lucide-react";
 import { getDatosPersonales } from "@/lib/jugador-sync";
+import { obtenerFotoJugadorSrc } from "@/lib/imagen-upload";
+import { HorariosEntrenamiento } from "@/components/horarios-entrenamiento";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +24,16 @@ export default async function DashboardUsuarioPage() {
       orderBy: { createdAt: "desc" },
       include: {
         asignaciones: {
-          include: { equipo: { include: { temporada: true } } },
+          include: {
+            equipo: {
+              include: {
+                temporada: true,
+                horariosEntrenamiento: {
+                  orderBy: [{ diaSemana: "asc" }, { minutoInicio: "asc" }],
+                },
+              },
+            },
+          },
         },
       },
     }),
@@ -30,7 +41,16 @@ export default async function DashboardUsuarioPage() {
       where: { usuarioId: session.user.id },
       include: {
         asignaciones: {
-          include: { equipo: { include: { temporada: true } } },
+          include: {
+            equipo: {
+              include: {
+                temporada: true,
+                horariosEntrenamiento: {
+                  orderBy: [{ diaSemana: "asc" }, { minutoInicio: "asc" }],
+                },
+              },
+            },
+          },
         },
       },
     }),
@@ -72,13 +92,14 @@ export default async function DashboardUsuarioPage() {
               Esta es tu ficha personal. Puedes editar tus datos.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardContent className="space-y-4">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-center gap-3">
                 <Avatar className="h-12 w-12">
-                  {datosJugadorPropio.jugador.fotoUrl ? (
-                    <AvatarImage src={datosJugadorPropio.jugador.fotoUrl} alt={datosJugadorPropio.datos.nombre} />
-                  ) : null}
+                  <AvatarImage
+                    src={obtenerFotoJugadorSrc(datosJugadorPropio.jugador)}
+                    alt={datosJugadorPropio.datos.nombre}
+                  />
                   <AvatarFallback>
                     {iniciales(datosJugadorPropio.datos.nombre, datosJugadorPropio.datos.apellidos)}
                   </AvatarFallback>
@@ -104,6 +125,13 @@ export default async function DashboardUsuarioPage() {
                 </Link>
               </Button>
             </div>
+            <div className="border-t pt-4">
+              <div className="mb-2 text-sm font-semibold">Horarios de entrenamiento</div>
+              <HorariosEntrenamiento
+                compacto
+                equipos={datosJugadorPropio.jugador.asignaciones.map((a) => a.equipo)}
+              />
+            </div>
           </CardContent>
         </Card>
       )}
@@ -126,7 +154,7 @@ export default async function DashboardUsuarioPage() {
                 <CardHeader className="pb-4">
                   <div className="flex items-center gap-3">
                     <Avatar className="h-12 w-12">
-                      {j.fotoUrl ? <AvatarImage src={j.fotoUrl} alt={datos.nombre} /> : null}
+                      <AvatarImage src={obtenerFotoJugadorSrc(j)} alt={datos.nombre} />
                       <AvatarFallback>{iniciales(datos.nombre, datos.apellidos)}</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 flex-1">
@@ -153,6 +181,13 @@ export default async function DashboardUsuarioPage() {
                       </div>
                     </div>
                   )}
+                  <div className="border-t pt-3">
+                    <div className="mb-2 text-xs font-medium">Horarios de entrenamiento</div>
+                    <HorariosEntrenamiento
+                      compacto
+                      equipos={j.asignaciones.map((a) => a.equipo)}
+                    />
+                  </div>
                   <Button asChild variant="outline" className="w-full">
                     <Link href={`/dashboard/jugadores/${j.id}`}>
                       <Users className="h-4 w-4" />

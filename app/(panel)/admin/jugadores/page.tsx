@@ -10,6 +10,7 @@ import { calcularEdad, formatearFecha, iniciales } from "@/lib/utils";
 import Link from "next/link";
 import { Plus, Search } from "lucide-react";
 import { BuscarJugadores } from "./buscar-cliente";
+import { obtenerFotoJugadorSrc } from "@/lib/imagen-upload";
 
 interface PageProps {
   searchParams: Promise<{ texto?: string; anio?: string; temporadaId?: string }>;
@@ -143,7 +144,7 @@ export default async function JugadoresPage({ searchParams }: PageProps) {
                     <TableCell>
                       <Link href={`/admin/jugadores/${j.id}`} className="flex items-center gap-3 hover:underline">
                         <Avatar className="h-9 w-9">
-                          {j.fotoUrl ? <AvatarImage src={j.fotoUrl} alt={j.nombre} /> : null}
+                          <AvatarImage src={obtenerFotoJugadorSrc(j)} alt={j.nombre} />
                           <AvatarFallback>{iniciales(j.nombre, j.apellidos)}</AvatarFallback>
                         </Avatar>
                         <div className="min-w-0">

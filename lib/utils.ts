@@ -50,3 +50,25 @@ export function nombreCompleto(nombre: string, apellidos: string): string {
 export function iniciales(nombre: string, apellidos: string): string {
   return `${nombre.charAt(0)}${apellidos.charAt(0)}`.toUpperCase();
 }
+
+/**
+ * Formatea un número con 2 decimales y separador de miles estilo español (1.234,56).
+ * Acepta number, string o Decimal de Prisma (que tiene toFixed).
+ */
+export function formatearNumero(valor: number | string | { toFixed: (n: number) => string } | null | undefined, decimales = 2): string {
+  if (valor === null || valor === undefined || valor === "") return "0";
+  const n = typeof valor === "number" ? valor : parseFloat(String(valor));
+  if (isNaN(n)) return "0";
+  return n.toLocaleString("es-ES", {
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
+  });
+}
+
+/**
+ * Formatea el número individual de un recibo como "#001234".
+ */
+export function formatearNumeroRecibo(numero: number | string): string {
+  const n = typeof numero === "string" ? parseInt(numero, 10) : numero;
+  return "#" + n.toString().padStart(6, "0");
+}

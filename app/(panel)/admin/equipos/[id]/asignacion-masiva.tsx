@@ -9,7 +9,16 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, Search, UserPlus, X } from "lucide-react";
 import { calcularEdad, iniciales } from "@/lib/utils";
-import { asignarJugadoresMasivo } from "../asignaciones-actions";
+import {
+  asignarJugadoresMasivo,
+  obtenerAsignacionesHeredables,
+  type ResumenHerenciaEquipo,
+} from "../asignaciones-actions";
+import { obtenerFotoJugadorSrc } from "@/lib/imagen-upload";
+import {
+  ConfirmarHerenciaEquipo,
+  type OpcionesHerenciaEquipo,
+} from "@/components/confirmar-herencia-equipo";
 
 interface JugadorDisponible {
   id: string;
@@ -31,6 +40,10 @@ export function AsignacionMasiva({ equipoId, jugadoresDisponibles }: Props) {
   const [anioFiltro, setAnioFiltro] = useState("");
   const [isPending, startTransition] = useTransition();
   const [msg, setMsg] = useState<{ tipo: "success" | "error"; texto: string } | null>(null);
+  const [confirmacion, setConfirmacion] = useState<{
+    jugadorIds: string[];
+    resumen: ResumenHerenciaEquipo;
+  } | null>(null);
 
   const jugadoresFiltrados = useMemo(() => {
     return jugadoresDisponibles.filter((j) => {
@@ -63,11 +76,29 @@ export function AsignacionMasiva({ equipoId, jugadoresDisponibles }: Props) {
 
   function handleAsignar() {
     if (seleccionados.size === 0) return;
+    const jugadorIds = Array.from(seleccionados);
     setMsg(null);
     startTransition(async () => {
-      await asignarJugadoresMasivo(equipoId, Array.from(seleccionados));
+      const resumen = await obtenerAsignacionesHeredables(equipoId, jugadorIds);
+      if (resumen.recibos.length > 0 || resumen.documentos.length > 0) {
+        setConfirmacion({ jugadorIds, resumen });
+        return;
+      }
+      await asignarJugadoresMasivo(equipoId, jugadorIds);
       setSeleccionados(new Set());
-      setMsg({ tipo: "success", texto: `${seleccionados.size} jugador(es) asignado(s) correctamente` });
+      setMsg({ tipo: "success", texto: `${jugadorIds.length} jugador(es) asignado(s) correctamente` });
+      router.refresh();
+    });
+  }
+
+  function confirmarAsignacion(opciones: OpcionesHerenciaEquipo) {
+    if (!confirmacion) return;
+    const jugadorIds = confirmacion.jugadorIds;
+    startTransition(async () => {
+      await asignarJugadoresMasivo(equipoId, jugadorIds, opciones);
+      setConfirmacion(null);
+      setSeleccionados(new Set());
+      setMsg({ tipo: "success", texto: `${jugadorIds.length} jugador(es) asignado(s) correctamente` });
       router.refresh();
     });
   }
@@ -85,6 +116,16 @@ export function AsignacionMasiva({ equipoId, jugadoresDisponibles }: Props) {
 
   return (
     <div className="space-y-4">
+      <ConfirmarHerenciaEquipo
+        open={Boolean(confirmacion)}
+        onOpenChange={(open) => {
+          if (!open && !isPending) setConfirmacion(null);
+        }}
+        resumen={confirmacion?.resumen ?? null}
+        cantidadJugadores={confirmacion?.jugadorIds.length ?? 0}
+        onConfirm={confirmarAsignacion}
+        isPending={isPending}
+      />
       <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
         <div className="flex-1 space-y-1">
           <label className="text-sm font-medium" htmlFor="busqueda-masiva">
@@ -168,7 +209,7 @@ export function AsignacionMasiva({ equipoId, jugadoresDisponibles }: Props) {
                 >
                   <Checkbox checked={checked} onCheckedChange={() => toggleSeleccion(j.id)} />
                   <Avatar className="h-9 w-9">
-                    {j.fotoUrl ? <AvatarImage src={j.fotoUrl} alt={j.nombre} /> : null}
+                    <AvatarImage src={obtenerFotoJugadorSrc(j)} alt={j.nombre} />
                     <AvatarFallback>{iniciales(j.nombre, j.apellidos)}</AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">

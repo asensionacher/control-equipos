@@ -54,6 +54,9 @@ async function main() {
   await waitForDb();
   runPrismaPush();
 
+  const { startEmailDigestWorker } = require("./email-digest-worker");
+  startEmailDigestWorker();
+
   console.log("[app] Iniciando servidor Next.js...");
   const { spawn } = require("child_process");
   const child = spawn("node", ["server.js"], {

@@ -5,7 +5,15 @@ import { useRouter } from "next/navigation";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Loader2 } from "lucide-react";
-import { toggleAsignacionEquipo } from "../../equipos/asignaciones-actions";
+import {
+  obtenerAsignacionesHeredables,
+  toggleAsignacionEquipo,
+  type ResumenHerenciaEquipo,
+} from "../../equipos/asignaciones-actions";
+import {
+  ConfirmarHerenciaEquipo,
+  type OpcionesHerenciaEquipo,
+} from "@/components/confirmar-herencia-equipo";
 
 interface Equipo {
   id: string;
@@ -28,13 +36,37 @@ interface Props {
 export function AsignarEquipos({ jugadorId, temporadas, equiposAsignadosIds }: Props) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
+  const [confirmacion, setConfirmacion] = useState<{
+    equipoId: string;
+    resumen: ResumenHerenciaEquipo;
+  } | null>(null);
   const [, startTransition] = useTransition();
   const asignadosSet = new Set(equiposAsignadosIds);
 
   function handleToggle(equipoId: string, checked: boolean) {
     setPending(equipoId);
     startTransition(async () => {
+      if (checked) {
+        const resumen = await obtenerAsignacionesHeredables(equipoId, [jugadorId]);
+        if (resumen.recibos.length > 0 || resumen.documentos.length > 0) {
+          setConfirmacion({ equipoId, resumen });
+          setPending(null);
+          return;
+        }
+      }
       await toggleAsignacionEquipo(jugadorId, equipoId, checked);
+      setPending(null);
+      router.refresh();
+    });
+  }
+
+  function confirmarAsignacion(opciones: OpcionesHerenciaEquipo) {
+    if (!confirmacion) return;
+    const equipoId = confirmacion.equipoId;
+    setPending(equipoId);
+    startTransition(async () => {
+      await toggleAsignacionEquipo(jugadorId, equipoId, true, opciones);
+      setConfirmacion(null);
       setPending(null);
       router.refresh();
     });
@@ -50,6 +82,16 @@ export function AsignarEquipos({ jugadorId, temporadas, equiposAsignadosIds }: P
 
   return (
     <div className="space-y-6">
+      <ConfirmarHerenciaEquipo
+        open={Boolean(confirmacion)}
+        onOpenChange={(open) => {
+          if (!open && !pending) setConfirmacion(null);
+        }}
+        resumen={confirmacion?.resumen ?? null}
+        cantidadJugadores={1}
+        onConfirm={confirmarAsignacion}
+        isPending={Boolean(pending)}
+      />
       {temporadas.map((temp) => (
         <div key={temp.id}>
           <h3 className="mb-3 text-sm font-semibold">{temp.nombre}</h3>

@@ -2,7 +2,7 @@ import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Users, Trophy, CalendarRange, UserCheck, UsersRound } from "lucide-react";
+import { Users, Trophy, UserCheck, UsersRound, FileCheck2, AlertCircle } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 
@@ -19,6 +19,10 @@ export default async function AdminDashboardPage() {
     jugadoresSinTutor,
     jugadoresSinEquipo,
     totalPadres,
+    recibosPendientes,
+    pagosPorConfirmar,
+    documentosPorRevisar,
+    totalRecibos,
     ultimosJugadores,
     ultimosPadres,
   ] = await Promise.all([
@@ -32,6 +36,16 @@ export default async function AdminDashboardPage() {
       where: { activo: true, asignaciones: { none: {} } },
     }),
     prisma.usuario.count({ where: { rol: "USUARIO" } }),
+    prisma.reciboJugador.count({
+      where: { estado: { in: ["PENDIENTE", "RECHAZADO"] } },
+    }),
+    prisma.reciboJugador.count({
+      where: { estado: "PENDIENTE", pagoDeclaradoAt: { not: null } },
+    }),
+    prisma.solicitudDocumentoJugador.count({
+      where: { estado: "SUBIDO", archivoKey: { not: null } },
+    }),
+    prisma.reciboJugador.count(),
     prisma.jugador.findMany({
       where: { activo: true },
       orderBy: { createdAt: "desc" },
@@ -75,10 +89,13 @@ export default async function AdminDashboardPage() {
           <Button asChild variant="outline">
             <Link href="/admin/equipos/nuevo">Nuevo equipo</Link>
           </Button>
+          <Button asChild variant="outline">
+            <Link href="/admin/recibos/nuevo">Nuevo recibo</Link>
+          </Button>
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-6">
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Jugadores</CardTitle>
@@ -87,6 +104,27 @@ export default async function AdminDashboardPage() {
           <CardContent>
             <div className="text-2xl font-bold">{totalJugadores}</div>
             <p className="text-xs text-muted-foreground">Activos</p>
+          </CardContent>
+        </Card>
+
+        <Card className={pagosPorConfirmar + documentosPorRevisar > 0 ? "border-amber-400" : ""}>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Por revisar</CardTitle>
+            <FileCheck2 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">
+              {pagosPorConfirmar + documentosPorRevisar}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              {pagosPorConfirmar} pagos · {documentosPorRevisar} documentos
+            </p>
+            <Link
+              href="/admin/pendientes"
+              className="mt-2 inline-block text-xs font-medium text-blue-700 hover:underline"
+            >
+              Abrir revisiones
+            </Link>
           </CardContent>
         </Card>
 
@@ -125,12 +163,12 @@ export default async function AdminDashboardPage() {
 
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Sin equipo</CardTitle>
-            <CalendarRange className="h-4 w-4 text-muted-foreground" />
+            <CardTitle className="text-sm font-medium">Recibos pendientes</CardTitle>
+            <AlertCircle className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold">{jugadoresSinEquipo}</div>
-            <p className="text-xs text-muted-foreground">En esta temporada</p>
+            <div className="text-2xl font-bold">{recibosPendientes}</div>
+            <p className="text-xs text-muted-foreground">de {totalRecibos} emitidos</p>
           </CardContent>
         </Card>
       </div>

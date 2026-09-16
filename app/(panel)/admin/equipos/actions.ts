@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
-import { equipoSchema } from "@/lib/validaciones";
+import { equipoSchema, horariosEquipoSchema } from "@/lib/validaciones";
 
 async function requireAdmin() {
   const session = await auth();
@@ -21,10 +21,31 @@ function parseForm(formData: FormData) {
   };
 }
 
+function parseHorarios(formData: FormData) {
+  const valor = formData.get("horarios");
+  if (typeof valor !== "string") {
+    return { error: "Los horarios de entrenamiento no son válidos" } as const;
+  }
+
+  try {
+    const parsed = horariosEquipoSchema.safeParse(JSON.parse(valor));
+    if (!parsed.success) {
+      return {
+        error: parsed.error.issues[0]?.message ?? "Los horarios de entrenamiento no son válidos",
+      } as const;
+    }
+    return { data: parsed.data } as const;
+  } catch {
+    return { error: "Los horarios de entrenamiento no son válidos" } as const;
+  }
+}
+
 export async function crearEquipo(formData: FormData) {
   await requireAdmin();
   const parsed = equipoSchema.safeParse(parseForm(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const horarios = parseHorarios(formData);
+  if ("error" in horarios) return { error: horarios.error };
 
   const existe = await prisma.equipo.findFirst({
     where: { nombre: parsed.data.nombre, temporadaId: parsed.data.temporadaId },
@@ -41,10 +62,14 @@ export async function crearEquipo(formData: FormData) {
       descripcion: parsed.data.descripcion || null,
       urlLiga: parsed.data.urlLiga || null,
       temporadaId: parsed.data.temporadaId,
+      horariosEntrenamiento: {
+        create: horarios.data,
+      },
     },
   });
 
   revalidatePath("/admin/equipos");
+  revalidatePath("/dashboard");
   redirect("/admin/equipos");
 }
 
@@ -52,25 +77,36 @@ export async function editarEquipo(id: string, formData: FormData) {
   await requireAdmin();
   const parsed = equipoSchema.safeParse(parseForm(formData));
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const horarios = parseHorarios(formData);
+  if ("error" in horarios) return { error: horarios.error };
 
   const existe = await prisma.equipo.findFirst({
     where: { nombre: parsed.data.nombre, temporadaId: parsed.data.temporadaId, NOT: { id } },
   });
   if (existe) return { error: "Ya existe otro equipo con ese nombre en esa temporada" };
 
-  await prisma.equipo.update({
-    where: { id },
-    data: {
-      nombre: parsed.data.nombre,
-      categoria: parsed.data.categoria || null,
-      descripcion: parsed.data.descripcion || null,
-      urlLiga: parsed.data.urlLiga || null,
-      temporadaId: parsed.data.temporadaId,
-    },
+  await prisma.$transaction(async (tx) => {
+    await tx.equipo.update({
+      where: { id },
+      data: {
+        nombre: parsed.data.nombre,
+        categoria: parsed.data.categoria || null,
+        descripcion: parsed.data.descripcion || null,
+        urlLiga: parsed.data.urlLiga || null,
+        temporadaId: parsed.data.temporadaId,
+      },
+    });
+    await tx.horarioEntrenamiento.deleteMany({ where: { equipoId: id } });
+    if (horarios.data.length > 0) {
+      await tx.horarioEntrenamiento.createMany({
+        data: horarios.data.map((horario) => ({ ...horario, equipoId: id })),
+      });
+    }
   });
 
   revalidatePath("/admin/equipos");
   revalidatePath(`/admin/equipos/${id}`);
+  revalidatePath("/dashboard");
   redirect(`/admin/equipos/${id}`);
 }
 

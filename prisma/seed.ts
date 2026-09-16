@@ -19,6 +19,27 @@ async function main() {
     },
   });
 
+  // Configuración del club (singleton)
+  await prisma.configuracionClub.upsert({
+    where: { id: 1 },
+    update: {},
+    create: {
+      id: 1,
+      nombre: "Club Deportivo de Prueba",
+      nif: "G12345678",
+      direccion: "Calle del Deporte, 1",
+      codigoPostal: "28001",
+      ciudad: "Madrid",
+      provincia: "Madrid",
+      pais: "España",
+      telefono: "910000000",
+      email: "info@controldeequipos.es",
+      web: "https://controldeequipos.es",
+      ivaPorDefecto: 21,
+      prefijoRecibo: "R",
+    },
+  });
+
   // Crear temporadas
   const tempActual = await prisma.temporada.create({
     data: {
@@ -209,6 +230,7 @@ async function main() {
   console.log(`- 2 temporadas creadas (2026/2027 activa, 2025/2026 histórica)`);
   console.log(`- 4 equipos creados`);
   console.log(`- 5 jugadores (1 sin tutor, 4 con padre, María es también jugadora)`);
+  console.log(`- Configuración del club inicializada (editable desde /admin/configuracion)`);
 }
 
 main()

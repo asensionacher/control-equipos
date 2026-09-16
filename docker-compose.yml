@@ -17,6 +17,40 @@ services:
       timeout: 5s
       retries: 5
 
+  s3:
+    image: quay.io/minio/minio:latest
+    container_name: control-equipos-s3
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY:-control-equipos}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY:-control-equipos-secret}
+    ports:
+      - "${S3_PORT:-9000}:9000"
+      - "${S3_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - ${S3_DATA_DIR:-~/.control-equipos/s3-data}:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  s3-init:
+    image: quay.io/minio/mc:latest
+    container_name: control-equipos-s3-init
+    depends_on:
+      s3:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://s3:9000 ${S3_ACCESS_KEY:-control-equipos} ${S3_SECRET_KEY:-control-equipos-secret} &&
+      mc mb -p local/${S3_BUCKET:-control-equipos-documents} || true &&
+      mc anonymous set none local/${S3_BUCKET:-control-equipos-documents} &&
+      echo 'Bucket ${S3_BUCKET:-control-equipos-documents} listo (privado).'
+      "
+    restart: "no"
+
   app:
     build:
       context: .
@@ -26,13 +60,27 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      s3:
+        condition: service_healthy
+      s3-init:
+        condition: service_completed_successfully
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-admin123}@db:5432/${POSTGRES_DB:-control_equipos}?schema=public"
       AUTH_SECRET: "${AUTH_SECRET:-cambia-esto-por-una-clave-segura-de-al-menos-32-caracteres}"
       AUTH_URL: "${AUTH_URL:-http://localhost:3000}"
       RESEND_API_KEY: "${RESEND_API_KEY:-}"
       EMAIL_FROM: "${EMAIL_FROM:-Control de Equipos <noreply@example.com>}"
+      EMAIL_DIGEST_WINDOW_SECONDS: "${EMAIL_DIGEST_WINDOW_SECONDS:-120}"
+      EMAIL_DIGEST_POLL_SECONDS: "${EMAIL_DIGEST_POLL_SECONDS:-30}"
       NEXT_PUBLIC_APP_NAME: "${NEXT_PUBLIC_APP_NAME:-Control de Equipos}"
+      # S3 / MinIO
+      # El hostname s3 solo existe dentro de la red de Docker.
+      S3_ENDPOINT: "http://s3:9000"
+      S3_REGION: "${S3_REGION:-eu-west-1}"
+      S3_ACCESS_KEY: "${S3_ACCESS_KEY:-control-equipos}"
+      S3_SECRET_KEY: "${S3_SECRET_KEY:-control-equipos-secret}"
+      S3_BUCKET: "${S3_BUCKET:-control-equipos-documents}"
+      S3_FORCE_PATH_STYLE: "${S3_FORCE_PATH_STYLE:-true}"
       NODE_ENV: production
     ports:
       - "${APP_PORT:-3000}:3000"

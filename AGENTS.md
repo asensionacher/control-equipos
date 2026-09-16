@@ -11,6 +11,22 @@ Instrucciones para sesiones OpenCode en este repositorio. Solo lo que no se infi
 
 ## Lo que un agente NO descubre fácilmente
 
+### Recibos y almacenamiento S3 (CRÍTICO)
+
+- **Numeración de recibos**: `Recibo.id` identifica internamente una emisión/lote. El número oficial autoincremental vive en `ReciboJugador.numero` y se formatea con `formatearNumeroRecibo(numero)` → `#001234`. Cada jugador asignado recibe un número distinto.
+- **Asignación**: un Recibo puede relacionarse con varios equipos mediante `equipos` y simultáneamente con jugadores directos. Los jugadores de un equipo quedan también marcados como asignados directamente para conservar una única asignación deduplicada. Al añadir después un jugador al equipo, `sincronizarAsignacionesJugador` hereda los recibos y documentos asociados. `equipoId` solo conserva compatibilidad con registros antiguos. El estado de pago es individual.
+- **PDFs** se generan con `lib/pdf-recibo.ts` (pdfkit) en formato español: emisor (de `ConfiguracionClub`), nº de recibo, fecha emisión/vencimiento, receptor (tutor o jugador), concepto, base imponible, IVA, total. Si está pagado, incluye fecha de pago, método y referencia.
+- **S3** (MinIO en Docker): claves `recibos/<year>/<id>.pdf` y `justificantes/<year>/<reciboJugadorId>/<timestamp>-<filename>`. El bucket queda **privado** (sin política pública). Nunca se sirven URLs prefirmadas al usuario — siempre se sirve el fichero a través de `/api/recibos/[id]/pdf` y `/api/recibos/jugador/[id]/justificante`, que verifican auth y permisos antes de hacer `getObjectBuffer`.
+- **Datos fiscales del club** viven en `ConfiguracionClub` (singleton `id=1`). Editable desde `/admin/configuracion`.
+- Al crear/anular/marcar pagos: invalidar el PDF cacheado (`invalidarPdfRecibo`) para que se regenere con los nuevos datos.
+- **Permisos del jugador**: el jugador debe tener `usuarioId === session.user.id` O existir una `Tutoria` con `usuarioId === session.user.id` para acceder a un ReciboJugador concreto.
+
+### Consentimientos y avisos agrupados (CRÍTICO)
+
+- Los consentimientos son globales: al crearlos se asignan a todos los jugadores activos y `sincronizarAsignacionesJugador` los asigna también a cada jugador nuevo.
+- La firma del jugador/tutor resuelve el consentimiento directamente. No existe validación administrativa; el admin solo puede revocarla, lo que elimina el PDF privado y devuelve la asignación a `PENDIENTE`.
+- Los avisos operativos se guardan en `NotificacionPendiente` y se agrupan por email tras una ventana sin novedades. En producción los procesa `scripts/email-digest-worker.js`; activaciones y restablecimientos de contraseña deben seguir usando `enviarEmail` directamente.
+
 ### Sincronización Usuario ↔ Jugador (CRÍTICO)
 
 Los datos personales (nombre, apellidos, email, teléfono) viven duplicados en `Usuario` y `Jugador`. Hay que sincronizarlos explícitamente desde `lib/jugador-sync.ts`:
@@ -55,6 +71,14 @@ No hace falta manejar esto manualmente — los callers ya reciben `devLink` en l
 
 `scripts/docker-start.js` se ejecuta al arrancar el contenedor. Espera a que la DB responda (hasta 30 intentos × 2s) y luego ejecuta `prisma db push --skip-generate --accept-data-loss` antes de arrancar Next. **No es opcional**: si lo arrancas sin esto, fallará porque la BD estará vacía.
 
+### S3 / MinIO es obligatorio en Docker
+
+Los servicios `s3` y `s3-init` crean el bucket privado. La app espera poder hablar con `s3:9000` desde dentro de la red Docker. Si MinIO no está listo, las rutas `/api/recibos/*` fallarán con errores de conexión.
+
+### Volumen S3 en la máquina host
+
+Los datos de MinIO se montan en `${S3_DATA_DIR:-~/.control-equipos/s3-data}` (definido en `.env`). Si necesitas mover el volumen, cambia esa variable y recrea el contenedor (`docker compose down s3 && docker compose up -d s3`).
+
 ### Schema compartido entre código y Dockerfile
 
 `prisma/schema.prisma` es la fuente de verdad. El `Dockerfile` copia:
@@ -85,3 +109,4 @@ Si cambias el schema, **debes rebuildear la imagen** (`docker compose build app`
 - No asumas sesión válida en server actions: verifica `session.user.id` contra BD antes de usar como FK.
 - No llames `prisma` directamente desde el middleware (Edge Runtime no lo soporta).
 - No crees una sección de "datos del tutor" en fichas de jugador — el modelo nuevo usa la tabla `Tutoria` que apunta a `Usuario`.
+- No generes URLs prefirmadas de S3 para servir PDFs/justificantes al usuario. Pásalas siempre por las rutas API autenticadas (`/api/recibos/*`).

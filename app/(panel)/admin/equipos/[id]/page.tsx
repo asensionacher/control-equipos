@@ -9,6 +9,8 @@ import Link from "next/link";
 import { ArrowLeft, Pencil, ExternalLink } from "lucide-react";
 import { calcularEdad, iniciales } from "@/lib/utils";
 import { AsignacionMasiva } from "./asignacion-masiva";
+import { obtenerFotoJugadorSrc } from "@/lib/imagen-upload";
+import { HorariosEntrenamiento } from "@/components/horarios-entrenamiento";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -23,6 +25,9 @@ export default async function FichaEquipoPage({ params }: PageProps) {
     where: { id },
     include: {
       temporada: true,
+      horariosEntrenamiento: {
+        orderBy: [{ diaSemana: "asc" }, { minutoInicio: "asc" }],
+      },
       asignaciones: {
         include: {
           jugador: true,
@@ -92,6 +97,16 @@ export default async function FichaEquipoPage({ params }: PageProps) {
 
       <Card>
         <CardHeader>
+          <CardTitle>Horarios de entrenamiento</CardTitle>
+          <CardDescription>Intervalos semanales configurados para este equipo</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <HorariosEntrenamiento equipos={[equipo]} soloActivos={false} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
           <CardTitle>Jugadores asignados</CardTitle>
           <CardDescription>
             {equipo.asignaciones.length} jugador{equipo.asignaciones.length === 1 ? "" : "es"}
@@ -109,7 +124,10 @@ export default async function FichaEquipoPage({ params }: PageProps) {
                   className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-accent"
                 >
                   <Avatar className="h-10 w-10">
-                    {a.jugador.fotoUrl ? <AvatarImage src={a.jugador.fotoUrl} alt={a.jugador.nombre} /> : null}
+                    <AvatarImage
+                      src={obtenerFotoJugadorSrc(a.jugador)}
+                      alt={a.jugador.nombre}
+                    />
                     <AvatarFallback>{iniciales(a.jugador.nombre, a.jugador.apellidos)}</AvatarFallback>
                   </Avatar>
                   <div className="min-w-0 flex-1">

@@ -2,6 +2,7 @@ import { getDatosPersonales } from "@/lib/jugador-sync";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
+import { obtenerFotoJugadorSrc } from "@/lib/imagen-upload";
 
 interface Props {
   jugador: {
@@ -34,7 +35,7 @@ export async function JugadorDatosPersonales({ jugador, href, showAvatar = true,
     <div className="flex items-center gap-3">
       {showAvatar && (
         <Avatar className="h-10 w-10 shrink-0">
-          {jugador.fotoUrl ? <AvatarImage src={jugador.fotoUrl} alt={datos.nombre} /> : null}
+          <AvatarImage src={obtenerFotoJugadorSrc(jugador)} alt={datos.nombre} />
           <AvatarFallback>
             {datos.nombre.charAt(0)}
             {datos.apellidos.charAt(0)}

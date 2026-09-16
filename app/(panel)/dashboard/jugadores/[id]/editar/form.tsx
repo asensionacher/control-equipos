@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { editarJugadorTutor } from "./actions";
+import { obtenerFotoJugadorSrc } from "@/lib/imagen-upload";
 
 interface JugadorData {
   id: string;
@@ -31,7 +32,11 @@ interface Props {
 
 export function JugadorEditTutorForm({ jugador }: Props) {
   const router = useRouter();
-  const [msg, setMsg] = useState<{ tipo: "success" | "error"; texto: string } | null>(null);
+  const [msg, setMsg] = useState<{
+    tipo: "success" | "error";
+    texto: string;
+    link?: string;
+  } | null>(null);
   const [isPending, startTransition] = useTransition();
   const [sexo, setSexo] = useState<string>(jugador.sexo ?? "");
 
@@ -45,9 +50,15 @@ export function JugadorEditTutorForm({ jugador }: Props) {
       if (result.error) {
         setMsg({ tipo: "error", texto: result.error });
       } else if (result.success) {
-        setMsg({ tipo: "success", texto: result.success });
+        setMsg({
+          tipo: "success",
+          texto: result.success,
+          link: result.devLink,
+        });
         router.refresh();
-        setTimeout(() => router.push(`/dashboard/jugadores/${jugador.id}`), 800);
+        if (!result.devLink) {
+          setTimeout(() => router.push(`/dashboard/jugadores/${jugador.id}`), 800);
+        }
       }
     });
   }
@@ -57,6 +68,11 @@ export function JugadorEditTutorForm({ jugador }: Props) {
       {msg && (
         <Alert variant={msg.tipo === "error" ? "destructive" : "success"}>
           <AlertDescription>{msg.texto}</AlertDescription>
+          {msg.link && (
+            <AlertDescription className="mt-2 break-all text-xs">
+              <strong>Enlace de desarrollo:</strong> {msg.link}
+            </AlertDescription>
+          )}
         </Alert>
       )}
 
@@ -108,14 +124,30 @@ export function JugadorEditTutorForm({ jugador }: Props) {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="fotoUrl">URL de la foto</Label>
+              <Label htmlFor="foto">Foto del jugador</Label>
+              {jugador.fotoUrl && (
+                <div className="flex items-center gap-3 rounded-md border p-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={obtenerFotoJugadorSrc(jugador) ?? undefined}
+                    alt={`${jugador.nombre} ${jugador.apellidos}`}
+                    className="h-16 w-16 rounded-full object-cover"
+                  />
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="eliminarFoto" />
+                    Eliminar foto actual
+                  </label>
+                </div>
+              )}
               <Input
-                id="fotoUrl"
-                name="fotoUrl"
-                type="url"
-                defaultValue={jugador.fotoUrl ?? ""}
-                placeholder="https://..."
+                id="foto"
+                name="foto"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
               />
+              <p className="text-xs text-muted-foreground">
+                JPG, PNG o WebP. Máximo 5 MB.
+              </p>
             </div>
           </div>
 

@@ -11,7 +11,17 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 
-export function LoginForm({ searchParams }: { searchParams: Promise<{ callbackUrl?: string; error?: string; registered?: string; reset?: string; activated?: string; expired?: string }> }) {
+export function LoginForm({
+  searchParams,
+  nombreClub,
+  tieneLogo,
+  colorPrimario,
+}: {
+  searchParams: Promise<{ callbackUrl?: string; error?: string; registered?: string; reset?: string; activated?: string; expired?: string }>;
+  nombreClub: string;
+  tieneLogo: boolean;
+  colorPrimario: string;
+}) {
   const params = use(searchParams);
   const router = useRouter();
   const [email, setEmail] = useState("");
@@ -51,9 +61,19 @@ export function LoginForm({ searchParams }: { searchParams: Promise<{ callbackUr
 
   return (
     <Card>
-      <CardHeader className="space-y-1">
-        <CardTitle className="text-2xl">Iniciar sesión</CardTitle>
-        <CardDescription>Introduce tus credenciales para acceder</CardDescription>
+      <CardHeader className="items-center space-y-3 text-center">
+        {tieneLogo && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src="/api/club/logo"
+            alt={`Escudo de ${nombreClub}`}
+            className="h-24 w-24 object-contain"
+          />
+        )}
+        <div className="space-y-1">
+          <CardTitle className="text-2xl">{nombreClub}</CardTitle>
+          <CardDescription>Acceso privado</CardDescription>
+        </div>
       </CardHeader>
       <form onSubmit={handleSubmit}>
         <CardContent className="space-y-4">
@@ -68,11 +88,11 @@ export function LoginForm({ searchParams }: { searchParams: Promise<{ callbackUr
             </Alert>
           )}
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">Usuario</Label>
             <Input
               id="email"
               type="email"
-              placeholder="tu@email.com"
+              placeholder="Email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               required
@@ -97,7 +117,12 @@ export function LoginForm({ searchParams }: { searchParams: Promise<{ callbackUr
           </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-3">
-          <Button type="submit" className="w-full" disabled={isPending}>
+          <Button
+            type="submit"
+            className="w-full"
+            style={{ backgroundColor: colorPrimario }}
+            disabled={isPending}
+          >
             {isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -107,9 +132,6 @@ export function LoginForm({ searchParams }: { searchParams: Promise<{ callbackUr
               "Entrar"
             )}
           </Button>
-          <Link href="/" className="text-sm text-muted-foreground hover:underline">
-            Volver al inicio
-          </Link>
         </CardFooter>
       </form>
     </Card>

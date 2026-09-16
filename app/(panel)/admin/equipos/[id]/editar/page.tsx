@@ -12,7 +12,14 @@ export default async function EditarEquipoPage({ params }: PageProps) {
   const session = await auth();
   if (!session?.user || session.user.rol !== "ADMIN") redirect("/dashboard");
 
-  const equipo = await prisma.equipo.findUnique({ where: { id } });
+  const equipo = await prisma.equipo.findUnique({
+    where: { id },
+    include: {
+      horariosEntrenamiento: {
+        orderBy: [{ diaSemana: "asc" }, { minutoInicio: "asc" }],
+      },
+    },
+  });
   if (!equipo) notFound();
 
   const temporadas = await prisma.temporada.findMany({
@@ -31,6 +38,7 @@ export default async function EditarEquipoPage({ params }: PageProps) {
           descripcion: equipo.descripcion,
           urlLiga: equipo.urlLiga,
           temporadaId: equipo.temporadaId,
+          horarios: equipo.horariosEntrenamiento,
         }}
         temporadas={temporadas}
       />

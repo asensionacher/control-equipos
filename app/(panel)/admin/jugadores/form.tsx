@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { crearJugador, editarJugador } from "./actions";
+import { obtenerFotoJugadorSrc } from "@/lib/imagen-upload";
 import Link from "next/link";
+import { calcularEdad } from "@/lib/utils";
 
 interface Tutor {
   id: string;
@@ -49,7 +51,14 @@ export function JugadorForm({ jugador, tutores }: Props) {
   const [isPending, startTransition] = useTransition();
   const [sexo, setSexo] = useState<string>(jugador?.sexo ?? "");
   const [tutorId, setTutorId] = useState<string>(jugador?.tutorUsuarioId ?? "");
+  const [fechaNacimiento, setFechaNacimiento] = useState(jugador?.fechaNacimiento ?? "");
   const [mensajeInvitacion, setMensajeInvitacion] = useState<string>("");
+  const esMayorDeEdad =
+    Boolean(fechaNacimiento) && calcularEdad(fechaNacimiento) >= 18;
+
+  useEffect(() => {
+    if (esMayorDeEdad) setTutorId("");
+  }, [esMayorDeEdad]);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -68,18 +77,23 @@ export function JugadorForm({ jugador, tutores }: Props) {
       email: ((formData.get("email") as string) || "").trim() || null,
       telefono: ((formData.get("telefono") as string) || "").trim() || null,
       direccion: ((formData.get("direccion") as string) || "").trim() || null,
-      fotoUrl: ((formData.get("fotoUrl") as string) || "").trim() || null,
       sexo: (sexo || null) as "MASCULINO" | "FEMENINO" | "OTRO" | null,
       tutorUsuarioId: tutorId || null,
       parentescoTutor: ((formData.get("parentescoTutor") as string) || "").trim() || null,
       emailContactoTutor: ((formData.get("emailContactoTutor") as string) || "").trim() || null,
       telefonoContactoTutor: ((formData.get("telefonoContactoTutor") as string) || "").trim() || null,
     };
+    const fotoFormData = new FormData();
+    const foto = formData.get("foto");
+    if (foto instanceof File && foto.size > 0) fotoFormData.set("foto", foto);
+    if (formData.get("eliminarFoto") === "on") {
+      fotoFormData.set("eliminarFoto", "on");
+    }
 
     startTransition(async () => {
       const result = jugador
-        ? await editarJugador(jugador.id!, datos)
-        : await crearJugador({ jugador: datos, mensajeInvitacion });
+        ? await editarJugador(jugador.id!, datos, fotoFormData)
+        : await crearJugador({ jugador: datos, mensajeInvitacion }, fotoFormData);
 
       if (result?.error) {
         setError(result.error);
@@ -135,7 +149,8 @@ export function JugadorForm({ jugador, tutores }: Props) {
                 name="fechaNacimiento"
                 type="date"
                 required
-                defaultValue={jugador?.fechaNacimiento ?? ""}
+                value={fechaNacimiento}
+                onChange={(event) => setFechaNacimiento(event.target.value)}
               />
             </div>
             <div className="space-y-2">
@@ -159,14 +174,33 @@ export function JugadorForm({ jugador, tutores }: Props) {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="fotoUrl">URL de la foto</Label>
+              <Label htmlFor="foto">Foto del jugador</Label>
+              {jugador?.id && jugador.fotoUrl && (
+                <div className="flex items-center gap-3 rounded-md border p-2">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={obtenerFotoJugadorSrc({
+                      id: jugador.id,
+                      fotoUrl: jugador.fotoUrl,
+                    }) ?? undefined}
+                    alt={`${jugador.nombre} ${jugador.apellidos}`}
+                    className="h-16 w-16 rounded-full object-cover"
+                  />
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" name="eliminarFoto" />
+                    Eliminar foto actual
+                  </label>
+                </div>
+              )}
               <Input
-                id="fotoUrl"
-                name="fotoUrl"
-                type="url"
-                placeholder="https://..."
-                defaultValue={jugador?.fotoUrl ?? ""}
+                id="foto"
+                name="foto"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
               />
+              <p className="text-xs text-muted-foreground">
+                JPG, PNG o WebP. Máximo 5 MB.
+              </p>
             </div>
           </div>
 
@@ -193,7 +227,16 @@ export function JugadorForm({ jugador, tutores }: Props) {
           <CardTitle>Tutor / Padre</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <Alert variant="info">
+          {esMayorDeEdad ? (
+            <Alert variant="info">
+              <AlertDescription>
+                Este jugador es mayor de edad y debe gestionar una cuenta propia. No puede
+                asignársele un tutor.
+              </AlertDescription>
+            </Alert>
+          ) : (
+            <>
+            <Alert variant="info">
             <AlertDescription>
               Opcional. Si el jugador es menor o quieres que un padre gestione su ficha, selecciónalo
               de la lista. Si no existe, créalo primero desde la sección{" "}
@@ -203,9 +246,9 @@ export function JugadorForm({ jugador, tutores }: Props) {
               . Si el jugador es mayor y debe gestionar su propia ficha, déjalo sin tutor y
               después, desde su ficha, podrás generar una activación de cuenta con su email.
             </AlertDescription>
-          </Alert>
+            </Alert>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <Label htmlFor="tutorUsuarioId">Tutor (padre/madre)</Label>
               <Select value={tutorId || "none"} onValueChange={(v) => setTutorId(v === "none" ? "" : v)}>
@@ -232,9 +275,9 @@ export function JugadorForm({ jugador, tutores }: Props) {
                 disabled={!tutorId}
               />
             </div>
-          </div>
+            </div>
 
-          <details className="rounded-lg border p-3">
+            <details className="rounded-lg border p-3">
             <summary className="cursor-pointer text-sm font-medium">
               Datos de contacto adicionales del tutor (sin cuenta)
             </summary>
@@ -259,19 +302,21 @@ export function JugadorForm({ jugador, tutores }: Props) {
                 />
               </div>
             </div>
-          </details>
+            </details>
 
-          {!jugador && tutorId && (
-            <div className="space-y-2">
-              <Label htmlFor="mensajeInvitacion">Mensaje para el email (opcional)</Label>
-              <Textarea
-                id="mensajeInvitacion"
-                rows={2}
-                value={mensajeInvitacion}
-                onChange={(e) => setMensajeInvitacion(e.target.value)}
-                placeholder="Mensaje personalizado que verá el tutor en el email de notificación..."
-              />
-            </div>
+            {!jugador && tutorId && (
+              <div className="space-y-2">
+                <Label htmlFor="mensajeInvitacion">Mensaje para el email (opcional)</Label>
+                <Textarea
+                  id="mensajeInvitacion"
+                  rows={2}
+                  value={mensajeInvitacion}
+                  onChange={(e) => setMensajeInvitacion(e.target.value)}
+                  placeholder="Mensaje personalizado que verá el tutor en el email de notificación..."
+                />
+              </div>
+            )}
+            </>
           )}
         </CardContent>
       </Card>

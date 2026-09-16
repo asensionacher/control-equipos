@@ -2,15 +2,18 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { render } from "@react-email/render";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { jugadorSchema, jugadorEditTutorSchema } from "@/lib/validaciones";
-import { enviarEmail } from "@/lib/email";
-import { PlantillaInvitacion } from "../../../../emails/plantilla-invitacion";
+import { sincronizarAsignacionesJugador } from "@/lib/sincronizar-asignaciones-jugador";
+import { encolarNotificacion } from "@/lib/notificaciones-jugador";
+import {
+  actualizarFotoJugador,
+  validarFotoFormulario,
+} from "@/lib/foto-jugador";
+import { calcularEdad } from "@/lib/utils";
 
 const APP_URL = process.env.AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? "Control de Equipos";
 
 async function requireAdmin() {
   const session = await auth();
@@ -27,7 +30,6 @@ interface CrearJugadorParams {
     email: string | null;
     telefono: string | null;
     direccion: string | null;
-    fotoUrl: string | null;
     sexo: "MASCULINO" | "FEMENINO" | "OTRO" | null;
     tutorUsuarioId: string | null;
     parentescoTutor: string | null;
@@ -37,8 +39,11 @@ interface CrearJugadorParams {
   mensajeInvitacion?: string;
 }
 
-export async function crearJugador(datos: CrearJugadorParams): Promise<{ error?: string; success?: string; jugadorId?: string }> {
-  const session = await requireAdmin();
+export async function crearJugador(
+  datos: CrearJugadorParams,
+  fotoFormData?: FormData
+): Promise<{ error?: string; success?: string; jugadorId?: string }> {
+  await requireAdmin();
 
   const parsed = jugadorSchema.safeParse({
     nombre: datos.jugador.nombre,
@@ -48,7 +53,6 @@ export async function crearJugador(datos: CrearJugadorParams): Promise<{ error?:
     email: datos.jugador.email ?? "",
     telefono: datos.jugador.telefono ?? "",
     direccion: datos.jugador.direccion ?? "",
-    fotoUrl: datos.jugador.fotoUrl ?? "",
     sexo: datos.jugador.sexo,
     tutorUsuarioId: datos.jugador.tutorUsuarioId ?? "",
     parentescoTutor: datos.jugador.parentescoTutor ?? "",
@@ -59,8 +63,11 @@ export async function crearJugador(datos: CrearJugadorParams): Promise<{ error?:
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
   }
+  const errorFoto = await validarFotoFormulario(fotoFormData);
+  if (errorFoto) return { error: errorFoto };
 
   const data = parsed.data;
+  const esMayorDeEdad = calcularEdad(data.fechaNacimiento) >= 18;
   const dni = data.dniNie || null;
   if (dni) {
     const existe = await prisma.jugador.findUnique({ where: { dniNie: dni } });
@@ -70,10 +77,10 @@ export async function crearJugador(datos: CrearJugadorParams): Promise<{ error?:
   // Determinar el tutor:
   // 1) Si se especifica tutorUsuarioId directamente
   // 2) Si no, intentar auto-vincular por email del jugador o email de contacto del tutor
-  let tutorUsuarioId = data.tutorUsuarioId || null;
-  let parentescoTutor = data.parentescoTutor || null;
+  let tutorUsuarioId = esMayorDeEdad ? null : data.tutorUsuarioId || null;
+  let parentescoTutor = esMayorDeEdad ? null : data.parentescoTutor || null;
 
-  if (!tutorUsuarioId) {
+  if (!esMayorDeEdad && !tutorUsuarioId) {
     const emailCandidato = (data.email || data.emailContactoTutor || "").toLowerCase().trim();
     if (emailCandidato) {
       const usuarioExistente = await prisma.usuario.findUnique({
@@ -101,7 +108,6 @@ export async function crearJugador(datos: CrearJugadorParams): Promise<{ error?:
       email: data.email || null,
       telefono: data.telefono || null,
       direccion: data.direccion || null,
-      fotoUrl: data.fotoUrl || null,
       sexo: data.sexo,
     },
   });
@@ -121,21 +127,13 @@ export async function crearJugador(datos: CrearJugadorParams): Promise<{ error?:
     // Enviar email notificando al padre/tutor
     const tutor = await prisma.usuario.findUnique({ where: { id: tutorUsuarioId } });
     if (tutor) {
-      const html = await render(
-        PlantillaInvitacion({
-          nombreDestino: tutor.nombre,
-          nombreJugador: `${jugador.nombre} ${jugador.apellidos}`,
-          tipoInvitacion: "VINCULACION",
-          nombreAdmin: `${session.user.nombre} ${session.user.apellidos}`,
-          nombreClub: APP_NAME,
-          urlInvitacion: `${APP_URL}/dashboard`,
-          mensaje: datos.mensajeInvitacion ?? "Se ha añadido un nuevo jugador a tu cuenta. Inicia sesión para verlo.",
-        })
-      );
-      await enviarEmail({
-        to: tutor.email,
-        subject: `Nuevo jugador añadido a tu cuenta - ${APP_NAME}`,
-        html,
+      await encolarNotificacion({
+        destinatario: tutor.email,
+        titulo: "Nuevo jugador añadido a tu cuenta",
+        detalle:
+          datos.mensajeInvitacion ??
+          `${jugador.nombre} ${jugador.apellidos} se ha añadido a tu cuenta.`,
+        url: `${APP_URL}/dashboard`,
       });
     }
 
@@ -145,6 +143,15 @@ export async function crearJugador(datos: CrearJugadorParams): Promise<{ error?:
       avisoVinculacion = `Se vinculó automáticamente al usuario existente con email ${data.email || data.emailContactoTutor}.`;
     }
   }
+
+  const errorSubidaFoto = await actualizarFotoJugador(jugador.id, fotoFormData);
+  if (errorSubidaFoto) {
+    return {
+      error: `${errorSubidaFoto}. El jugador se ha creado sin foto.`,
+      jugadorId: jugador.id,
+    };
+  }
+  await sincronizarAsignacionesJugador(jugador.id);
 
   revalidatePath("/admin/jugadores");
   revalidatePath("/admin/padres");
@@ -158,7 +165,8 @@ export async function crearJugador(datos: CrearJugadorParams): Promise<{ error?:
 
 export async function editarJugador(
   id: string,
-  datos: CrearJugadorParams["jugador"]
+  datos: CrearJugadorParams["jugador"],
+  fotoFormData?: FormData
 ): Promise<{ error?: string; success?: string }> {
   await requireAdmin();
 
@@ -170,7 +178,6 @@ export async function editarJugador(
     email: datos.email ?? "",
     telefono: datos.telefono ?? "",
     direccion: datos.direccion ?? "",
-    fotoUrl: datos.fotoUrl ?? "",
     sexo: datos.sexo,
     tutorUsuarioId: datos.tutorUsuarioId ?? "",
     parentescoTutor: datos.parentescoTutor ?? "",
@@ -179,8 +186,11 @@ export async function editarJugador(
   });
 
   if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  const errorFoto = await validarFotoFormulario(fotoFormData);
+  if (errorFoto) return { error: errorFoto };
 
   const data = parsed.data;
+  const esMayorDeEdad = calcularEdad(data.fechaNacimiento) >= 18;
   const dni = data.dniNie || null;
   if (dni) {
     const existe = await prisma.jugador.findFirst({ where: { dniNie: dni, NOT: { id } } });
@@ -197,7 +207,6 @@ export async function editarJugador(
       email: data.email || null,
       telefono: data.telefono || null,
       direccion: data.direccion || null,
-      fotoUrl: data.fotoUrl || null,
       sexo: data.sexo,
     },
   });
@@ -228,7 +237,7 @@ export async function editarJugador(
   }
 
   // Actualizar tutor (relación Tutoria)
-  const nuevaTutoriaId = data.tutorUsuarioId || null;
+  const nuevaTutoriaId = esMayorDeEdad ? null : data.tutorUsuarioId || null;
   const tutoriaActual = await prisma.tutoria.findFirst({
     where: { jugadorId: id, esPrincipal: true },
   });
@@ -251,9 +260,11 @@ export async function editarJugador(
       });
     }
   } else if (!nuevaTutoriaId && tutoriaActual) {
-    // Quitar tutor principal
-    await prisma.tutoria.delete({ where: { id: tutoriaActual.id } });
+    await prisma.tutoria.deleteMany({ where: { jugadorId: id } });
   }
+
+  const errorSubidaFoto = await actualizarFotoJugador(id, fotoFormData);
+  if (errorSubidaFoto) return { error: errorSubidaFoto };
 
   revalidatePath("/admin/jugadores");
   revalidatePath(`/admin/jugadores/${id}`);
@@ -301,7 +312,6 @@ export async function editarJugadorTutor(
     email: formData.get("email") || "",
     telefono: formData.get("telefono") || "",
     direccion: formData.get("direccion") || "",
-    fotoUrl: formData.get("fotoUrl") || "",
     sexo: sexoValido,
   });
 
@@ -327,7 +337,6 @@ export async function editarJugadorTutor(
       email: parsed.data.email || null,
       telefono: parsed.data.telefono || null,
       direccion: parsed.data.direccion || null,
-      fotoUrl: parsed.data.fotoUrl || null,
       sexo: parsed.data.sexo,
     },
   });

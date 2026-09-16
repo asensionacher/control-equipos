@@ -2,6 +2,7 @@ import Link from "next/link";
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { getConfiguracionClub } from "@/lib/club-utils";
 
 export const dynamic = "force-dynamic";
 
@@ -11,15 +12,26 @@ export default async function HomePage() {
     redirect(session.user.rol === "ADMIN" ? "/admin" : "/dashboard");
   }
 
-  const totalAdmins = await prisma.usuario.count({ where: { rol: "ADMIN" } });
+  const [totalAdmins, club] = await Promise.all([
+    prisma.usuario.count({ where: { rol: "ADMIN" } }),
+    getConfiguracionClub(),
+  ]);
   const mostrarRegistro = totalAdmins === 0;
 
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
       <div className="container mx-auto px-4 py-12 md:py-20">
         <div className="mx-auto max-w-4xl text-center">
+          {club.logoKey && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src="/api/club/logo"
+              alt={`Escudo de ${club.nombre}`}
+              className="mx-auto mb-6 h-28 w-28 object-contain"
+            />
+          )}
           <h1 className="text-3xl font-bold tracking-tight text-gray-900 sm:text-4xl md:text-5xl lg:text-6xl">
-            Control de Equipos
+            {club.nombre}
           </h1>
           <p className="mt-4 text-base text-gray-600 sm:mt-6 sm:text-lg md:text-xl">
             Sistema completo de gestión de equipos, jugadores y temporadas

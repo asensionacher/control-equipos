@@ -6,13 +6,15 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { calcularEdad, formatearFecha, iniciales } from "@/lib/utils";
+import { calcularEdad, formatearFecha, formatearNumeroRecibo, iniciales } from "@/lib/utils";
 import Link from "next/link";
-import { Pencil, Mail, Users, Trophy, ExternalLink, UserPlus } from "lucide-react";
+import { Pencil, Mail, Users, Trophy, ExternalLink, UserPlus, FileText } from "lucide-react";
 import { EliminarJugadorButton } from "./eliminar-button";
 import { AsignarEquipos } from "./asignar-equipos";
 import { CrearActivacionJugador } from "./crear-activacion-jugador";
 import { getDatosPersonales } from "@/lib/jugador-sync";
+import { formatearEquiposAsignados } from "@/lib/asignacion-equipos";
+import { obtenerFotoJugadorSrc } from "@/lib/imagen-upload";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -38,6 +40,20 @@ export default async function FichaJugadorPage({ params }: PageProps) {
       },
       usuario: {
         select: { id: true, nombre: true, email: true },
+      },
+      recibosJugador: {
+        include: {
+          recibo: {
+            include: {
+              equipo: { include: { temporada: true } },
+              equipos: { include: { temporada: true } },
+            },
+          },
+        },
+        orderBy: [
+          { recibo: { fechaEmision: "desc" } },
+          { numero: "desc" },
+        ],
       },
     },
   });
@@ -98,7 +114,7 @@ export default async function FichaJugadorPage({ params }: PageProps) {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div className="flex items-center gap-4">
           <Avatar className="h-16 w-16 sm:h-20 sm:w-20">
-            {jugador.fotoUrl ? <AvatarImage src={jugador.fotoUrl} alt={jugador.nombre} /> : null}
+            <AvatarImage src={obtenerFotoJugadorSrc(jugador)} alt={jugador.nombre} />
             <AvatarFallback className="text-lg">{iniciales(jugador.nombre, jugador.apellidos)}</AvatarFallback>
           </Avatar>
           <div>
@@ -338,6 +354,61 @@ export default async function FichaJugadorPage({ params }: PageProps) {
           </CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileText className="h-5 w-5" />
+            Recibos asignados
+          </CardTitle>
+          <CardDescription>
+            Todos los recibos emitidos a este jugador, del más nuevo al más antiguo
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {jugador.recibosJugador.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Este jugador no tiene recibos asignados todavía.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {jugador.recibosJugador.map((rj) => (
+                <li key={rj.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
+                  <div>
+                    <Link href={`/admin/recibos/${rj.reciboId}`} className="font-medium hover:underline">
+                      {formatearNumeroRecibo(rj.numero)} · {rj.recibo.concepto}
+                    </Link>
+                    <div className="text-xs text-muted-foreground">
+                      {formatearFecha(rj.recibo.fechaEmision)}
+                      {formatearEquiposAsignados(rj.recibo) && (
+                        <> · {formatearEquiposAsignados(rj.recibo)}</>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">{rj.recibo.total.toString()} €</span>
+                    <Badge
+                      variant={
+                        rj.estado === "PAGADO"
+                          ? "success"
+                          : rj.estado === "ANULADO"
+                          ? "destructive"
+                          : "warning"
+                      }
+                    >
+                      {rj.estado === "PAGADO"
+                        ? "Pagado"
+                        : rj.estado === "ANULADO"
+                        ? "Anulado"
+                        : "Pendiente"}
+                    </Badge>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
