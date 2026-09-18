@@ -9,7 +9,6 @@ import Link from "next/link";
 import { Plus, Pencil, Users, ExternalLink } from "lucide-react";
 import { getConfiguracionClub } from "@/lib/club-utils";
 import { EliminarEquipoButton } from "./eliminar-button";
-import { CrearEntrenadoresButton } from "./crear-entrenadores-button";
 import { ImportarEquiposFcfButton } from "./importar-fcf-button";
 
 export default async function EquiposPage() {
@@ -49,7 +48,6 @@ export default async function EquiposPage() {
         </div>
         <div className="flex flex-col gap-2 sm:items-end">
           <div className="flex flex-wrap gap-2">
-            {temporadaActiva && <CrearEntrenadoresButton />}
             {club.codigoFcf && (
               <ImportarEquiposFcfButton temporadaNombre={temporadaActiva?.nombre ?? null} />
             )}

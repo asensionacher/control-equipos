@@ -3,7 +3,6 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
-import { asegurarEntrenadoresFicticios } from "@/lib/entrenadores-fcf";
 import { obtenerEquiposFcf } from "@/lib/fcf";
 import { prisma } from "@/lib/prisma";
 import { formatearFechaHora } from "@/lib/utils";
@@ -12,7 +11,6 @@ import { equipoSchema, horariosEquipoSchema } from "@/lib/validaciones";
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user || session.user.rol !== "ADMIN") throw new Error("No autorizado");
-  return session;
 }
 
 function parseForm(formData: FormData) {
@@ -148,7 +146,7 @@ export async function importarEquiposFcf(): Promise<{
   success?: string;
   warning?: string;
 }> {
-  const session = await requireAdmin();
+  await requireAdmin();
   const fechaImportacion = formatearFechaHora(new Date(), { timeZone: "Europe/Madrid" });
 
   const [club, temporada] = await Promise.all([
@@ -234,22 +232,6 @@ export async function importarEquiposFcf(): Promise<{
     return { error: "No se pudieron guardar los equipos importados" };
   }
 
-  let entrenadores;
-  try {
-    entrenadores = await asegurarEntrenadoresFicticios({
-      temporadaId: temporada.id,
-      creadoPorId: session.user.id,
-    });
-  } catch (error) {
-    console.error("[fcf] No se pudieron crear los entrenadores ficticios:", error);
-    return {
-      error:
-        error instanceof Error
-          ? `Los equipos se importaron, pero sus entrenadores no: ${error.message}`
-          : "Los equipos se importaron, pero no se pudieron crear sus entrenadores",
-    };
-  }
-
   revalidatePath("/admin/equipos");
   revalidatePath("/admin");
   revalidatePath("/dashboard");
@@ -264,46 +246,7 @@ export async function importarEquiposFcf(): Promise<{
       : undefined;
 
   return {
-    success: `Importación completada en ${temporada.nombre}: ${nuevos.length} equipos creados${resumenOmitidos}; ${entrenadores.equiposCubiertos} entrenadores asignados (${entrenadores.cuentasCreadas} cuentas nuevas).`,
+    success: `Importación completada en ${temporada.nombre}: ${nuevos.length} equipos creados${resumenOmitidos}.`,
     warning,
   };
-}
-
-export async function crearEntrenadoresFicticiosEquipos(): Promise<{
-  error?: string;
-  success?: string;
-}> {
-  const session = await requireAdmin();
-  const temporada = await prisma.temporada.findFirst({
-    where: { activa: true },
-    orderBy: { fechaInicio: "desc" },
-    select: { id: true, nombre: true },
-  });
-  if (!temporada) {
-    return { error: "No hay ninguna temporada activa" };
-  }
-
-  try {
-    const resultado = await asegurarEntrenadoresFicticios({
-      temporadaId: temporada.id,
-      creadoPorId: session.user.id,
-    });
-    revalidatePath("/admin/equipos");
-    revalidatePath("/admin/entrenadores");
-    revalidatePath("/admin/usuarios");
-    return {
-      success:
-        resultado.equiposCubiertos === 0
-          ? `Todos los equipos de ${temporada.nombre} ya tienen entrenador`
-          : `Se han asignado entrenadores a ${resultado.equiposCubiertos} equipos de ${temporada.nombre} y creado ${resultado.cuentasCreadas} cuentas ficticias.`,
-    };
-  } catch (error) {
-    console.error("[entrenadores] No se pudieron crear las cuentas ficticias:", error);
-    return {
-      error:
-        error instanceof Error
-          ? error.message
-          : "No se pudieron crear los entrenadores ficticios",
-    };
-  }
 }
