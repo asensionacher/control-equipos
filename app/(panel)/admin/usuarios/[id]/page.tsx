@@ -100,7 +100,7 @@ export default async function FichaUsuarioPage({ params, searchParams }: PagePro
       tutorias: { none: { esPrincipal: true } },
     },
     orderBy: [{ apellidos: "asc" }, { nombre: "asc" }],
-    select: { id: true, nombre: true, apellidos: true },
+    select: { id: true, nombre: true, apellidos: true, fechaNacimiento: true },
   });
 
   const jugador = usuario.jugadorComoUsuario
