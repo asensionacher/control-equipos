@@ -12,6 +12,7 @@ import { AsignacionMasiva } from "./asignacion-masiva";
 import { obtenerFotoJugadorSrc } from "@/lib/imagen-upload";
 import { HorariosEntrenamiento } from "@/components/horarios-entrenamiento";
 import { UserCog } from "lucide-react";
+import { AsignarEntrenadorModal } from "./asignar-entrenador-modal";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -46,22 +47,39 @@ export default async function FichaEquipoPage({ params }: PageProps) {
   if (!equipo) notFound();
 
   const jugadoresAsignadosIds = new Set(equipo.asignaciones.map((a) => a.jugadorId));
+  const entrenadoresAsignadosIds = new Set(
+    equipo.entrenadoresAsignaciones.flatMap(({ entrenador }) =>
+      entrenador.usuarioId ? [entrenador.usuarioId] : []
+    )
+  );
 
-  // Jugadores disponibles: activos y no asignados ya a este equipo
-  const jugadoresDisponibles = await prisma.jugador.findMany({
-    where: {
-      activo: true,
-      NOT: { id: { in: Array.from(jugadoresAsignadosIds) } },
-    },
-    orderBy: [{ apellidos: "asc" }, { nombre: "asc" }],
-    select: {
-      id: true,
-      nombre: true,
-      apellidos: true,
-      fechaNacimiento: true,
-      fotoUrl: true,
-    },
-  });
+  const [jugadoresDisponibles, usuariosDisponibles] = await Promise.all([
+    prisma.jugador.findMany({
+      where: {
+        activo: true,
+        NOT: { id: { in: Array.from(jugadoresAsignadosIds) } },
+      },
+      orderBy: [{ apellidos: "asc" }, { nombre: "asc" }],
+      select: {
+        id: true,
+        nombre: true,
+        apellidos: true,
+        fechaNacimiento: true,
+        fotoUrl: true,
+      },
+    }),
+    prisma.usuario.findMany({
+      where: { id: { notIn: Array.from(entrenadoresAsignadosIds) } },
+      orderBy: [{ apellidos: "asc" }, { nombre: "asc" }],
+      select: {
+        id: true,
+        nombre: true,
+        apellidos: true,
+        email: true,
+        entrenadorComoUsuario: { select: { id: true } },
+      },
+    }),
+  ]);
 
   return (
     <div className="space-y-6">
@@ -115,14 +133,26 @@ export default async function FichaEquipoPage({ params }: PageProps) {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <UserCog className="h-5 w-5" />
-            Cuerpo técnico
-          </CardTitle>
-          <CardDescription>
-            Entrenadores asignados a este equipo. Se configuran desde su ficha.
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div className="space-y-1.5">
+            <CardTitle className="flex items-center gap-2">
+              <UserCog className="h-5 w-5" />
+              Cuerpo técnico
+            </CardTitle>
+            <CardDescription>
+              Entrenadores asignados a este equipo.
+            </CardDescription>
+          </div>
+          <AsignarEntrenadorModal
+            equipoId={equipo.id}
+            usuarios={usuariosDisponibles.map((usuario) => ({
+              id: usuario.id,
+              nombre: usuario.nombre,
+              apellidos: usuario.apellidos,
+              email: usuario.email,
+              tienePerfilEntrenador: Boolean(usuario.entrenadorComoUsuario),
+            }))}
+          />
         </CardHeader>
         <CardContent>
           {equipo.entrenadoresAsignaciones.length === 0 ? (

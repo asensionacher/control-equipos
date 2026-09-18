@@ -11,6 +11,7 @@ import { equipoSchema, horariosEquipoSchema } from "@/lib/validaciones";
 async function requireAdmin() {
   const session = await auth();
   if (!session?.user || session.user.rol !== "ADMIN") throw new Error("No autorizado");
+  return session;
 }
 
 function parseForm(formData: FormData) {
@@ -139,6 +140,87 @@ export async function eliminarEquipo(id: string) {
   revalidatePath("/admin");
   revalidatePath("/dashboard");
   redirect("/admin/equipos");
+}
+
+export async function asignarUsuarioComoEntrenador(
+  equipoId: string,
+  usuarioId: string
+): Promise<{ error?: string; success?: string }> {
+  const session = await requireAdmin();
+  if (!equipoId || !usuarioId) return { error: "Selecciona un usuario" };
+
+  const [equipo, usuario] = await Promise.all([
+    prisma.equipo.findUnique({
+      where: { id: equipoId },
+      select: { id: true, temporadaId: true },
+    }),
+    prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: {
+        id: true,
+        nombre: true,
+        apellidos: true,
+        email: true,
+        telefono: true,
+        telefonoAlternativo: true,
+        entrenadorComoUsuario: { select: { id: true } },
+      },
+    }),
+  ]);
+  if (!equipo) return { error: "Equipo no encontrado" };
+  if (!usuario) return { error: "Usuario no encontrado" };
+
+  try {
+    const entrenadorId = await prisma.$transaction(async (tx) => {
+      const entrenador =
+        usuario.entrenadorComoUsuario ??
+        (await tx.entrenador.create({
+          data: {
+            nombre: usuario.nombre,
+            apellidos: usuario.apellidos,
+            email: usuario.email,
+            telefono: usuario.telefono,
+            telefonoAlternativo: usuario.telefonoAlternativo,
+            usuarioId: usuario.id,
+            creadoPorId: session.user.id,
+          },
+          select: { id: true },
+        }));
+
+      if (usuario.entrenadorComoUsuario) {
+        await tx.entrenador.update({
+          where: { id: entrenador.id },
+          data: { activo: true },
+        });
+      }
+
+      await tx.entrenadorEquipo.upsert({
+        where: {
+          entrenadorId_equipoId_rol: {
+            entrenadorId: entrenador.id,
+            equipoId: equipo.id,
+            rol: "ENTRENADOR_PRINCIPAL",
+          },
+        },
+        update: { temporadaId: equipo.temporadaId },
+        create: {
+          entrenadorId: entrenador.id,
+          equipoId: equipo.id,
+          rol: "ENTRENADOR_PRINCIPAL",
+          temporadaId: equipo.temporadaId,
+        },
+      });
+      return entrenador.id;
+    });
+
+    revalidatePath(`/admin/equipos/${equipoId}`);
+    revalidatePath(`/admin/entrenadores/${entrenadorId}`);
+    revalidatePath(`/admin/usuarios/${usuarioId}`);
+    return { success: "Entrenador asignado correctamente" };
+  } catch (error) {
+    console.error("[equipos] No se pudo asignar el entrenador:", error);
+    return { error: "No se pudo asignar el entrenador" };
+  }
 }
 
 export async function importarEquiposFcf(): Promise<{
