@@ -5,6 +5,32 @@ export interface DatosPersonalesJugador {
   apellidos: string;
   email: string | null;
   telefono: string | null;
+  telefonoAlternativo: string | null;
+}
+
+/**
+ * Devuelve true si el Jugador puede usar el portal por su cuenta.
+ * Reglas:
+ *   - Tiene que existir un Usuario vinculado (usuarioId)
+ *   - Ese Usuario debe tener un email válido (no vacío ni null)
+ *   - El Jugador NO debe tener tutorias activas (si las tiene, lo gestiona el padre)
+ */
+export async function jugadorTieneAccesoPortalPropio(
+  jugadorId: string
+): Promise<boolean> {
+  const jugador = await prisma.jugador.findUnique({
+    where: { id: jugadorId },
+    select: {
+      usuarioId: true,
+      tutorias: { select: { id: true } },
+      usuario: { select: { email: true } },
+    },
+  });
+  if (!jugador) return false;
+  if (!jugador.usuarioId) return false;
+  if (!jugador.usuario?.email) return false;
+  if (jugador.tutorias.length > 0) return false;
+  return true;
 }
 
 /**
@@ -19,7 +45,7 @@ export interface DatosPersonalesJugador {
  *
  * Reglas finales:
  * - nombre, apellidos: SIEMPRE del Jugador (son los nombres del jugador)
- * - email, telefono:
+ * - email, telefono, telefonoAlternativo:
  *    - Si tiene Usuario propio -> del Usuario
  *    - Si no, del tutor principal
  *    - Si no, del Jugador
@@ -38,25 +64,28 @@ export async function getDatosPersonales(jugadorId: string): Promise<DatosPerson
   });
 
   if (!jugador) {
-    return { nombre: "", apellidos: "", email: null, telefono: null };
+    return { nombre: "", apellidos: "", email: null, telefono: null, telefonoAlternativo: null };
   }
 
   const tutorPrincipal = jugador.tutorias[0]?.usuario;
   const usuarioPropio = jugador.usuario;
 
-  // Email y teléfono vienen del usuario apropiado:
+  // Email y teléfonos vienen del usuario apropiado:
   // - Si tiene cuenta propia -> ese Usuario
   // - Si no -> tutor principal
   // - Si no -> datos del Jugador
   let email: string | null = jugador.email;
   let telefono: string | null = jugador.telefono;
+  let telefonoAlternativo: string | null = jugador.telefonoAlternativo;
 
   if (usuarioPropio && usuarioPropio.passwordHash) {
     email = usuarioPropio.email;
     telefono = usuarioPropio.telefono;
+    telefonoAlternativo = usuarioPropio.telefonoAlternativo;
   } else if (tutorPrincipal) {
     email = email ?? tutorPrincipal.email;
     telefono = telefono ?? tutorPrincipal.telefono;
+    telefonoAlternativo = telefonoAlternativo ?? tutorPrincipal.telefonoAlternativo;
   }
 
   return {
@@ -64,6 +93,7 @@ export async function getDatosPersonales(jugadorId: string): Promise<DatosPerson
     apellidos: jugador.apellidos,
     email,
     telefono,
+    telefonoAlternativo,
   };
 }
 
@@ -87,6 +117,7 @@ export async function sincronizarDatosPersonalesUsuario(usuarioId: string): Prom
       data: {
         email: usuario.email,
         telefono: usuario.telefono,
+        telefonoAlternativo: usuario.telefonoAlternativo,
       },
     });
   }
@@ -109,6 +140,9 @@ export async function sincronizarDatosPersonalesUsuario(usuarioId: string): Prom
           // datos que el admin introdujo manualmente
           ...(jugador.email == null ? { email: usuario.email } : {}),
           ...(jugador.telefono == null ? { telefono: usuario.telefono } : {}),
+          ...(jugador.telefonoAlternativo == null
+            ? { telefonoAlternativo: usuario.telefonoAlternativo }
+            : {}),
         },
       });
     }

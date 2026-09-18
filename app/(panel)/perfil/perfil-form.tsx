@@ -9,7 +9,13 @@ import { Loader2 } from "lucide-react";
 import { actualizarPerfil } from "./actions";
 
 interface Props {
-  usuario: { nombre: string; apellidos: string; email: string; telefono: string | null };
+  usuario: {
+    nombre: string;
+    apellidos: string;
+    email: string | null;
+    telefono: string | null;
+    telefonoAlternativo: string | null;
+  };
 }
 
 export function PerfilForm({ usuario }: Props) {
@@ -37,7 +43,12 @@ export function PerfilForm({ usuario }: Props) {
 
       <div className="space-y-2">
         <Label htmlFor="email">Email</Label>
-        <Input id="email" value={usuario.email} disabled className="bg-muted" />
+        <Input
+            id="email"
+            value={usuario.email ?? ""}
+            disabled
+            className="bg-muted"
+          />
         <p className="text-xs text-muted-foreground">
           El email no se puede modificar. Contacta con el administrador del club si necesitas
           cambiarlo.
@@ -55,9 +66,20 @@ export function PerfilForm({ usuario }: Props) {
         </div>
       </div>
 
-      <div className="space-y-2">
-        <Label htmlFor="telefono">Teléfono</Label>
-        <Input id="telefono" name="telefono" type="tel" defaultValue={usuario.telefono ?? ""} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="telefono">Teléfono</Label>
+          <Input id="telefono" name="telefono" type="tel" defaultValue={usuario.telefono ?? ""} />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="telefonoAlternativo">Teléfono alternativo</Label>
+          <Input
+            id="telefonoAlternativo"
+            name="telefonoAlternativo"
+            type="tel"
+            defaultValue={usuario.telefonoAlternativo ?? ""}
+          />
+        </div>
       </div>
 
       <div className="flex justify-end">

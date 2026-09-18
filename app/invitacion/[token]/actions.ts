@@ -9,6 +9,7 @@ const registroConInvitacionSchema = z.object({
   nombre: z.string().min(2),
   apellidos: z.string().min(2),
   telefono: z.string().optional(),
+  telefonoAlternativo: z.string().optional(),
   password: z.string().min(8),
 });
 
@@ -29,6 +30,7 @@ export async function aceptarInvitacionRegistro(
     nombre: formData.get("nombre"),
     apellidos: formData.get("apellidos"),
     telefono: formData.get("telefono") || undefined,
+    telefonoAlternativo: formData.get("telefonoAlternativo") || undefined,
     password: formData.get("password"),
   });
 
@@ -52,6 +54,7 @@ export async function aceptarInvitacionRegistro(
       nombre: parsed.data.nombre,
       apellidos: parsed.data.apellidos,
       telefono: parsed.data.telefono,
+      telefonoAlternativo: parsed.data.telefonoAlternativo,
       passwordHash,
       rol: "USUARIO",
       emailVerificado: true,

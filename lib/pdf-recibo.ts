@@ -7,7 +7,7 @@ type UsuarioBasico = {
   id: string;
   nombre: string;
   apellidos: string;
-  email: string;
+  email: string | null;
   telefono?: string | null;
 };
 

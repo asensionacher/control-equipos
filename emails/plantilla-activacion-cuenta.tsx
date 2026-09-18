@@ -15,7 +15,7 @@ interface PlantillaActivacionCuentaProps {
   urlActivacion: string;
   diasExpiracion: number;
   nombreClub: string;
-  motivo: "padre" | "jugador";
+  motivo: "padre" | "jugador" | "admin" | "usuario";
   nombreJugadorVinculado?: string;
 }
 

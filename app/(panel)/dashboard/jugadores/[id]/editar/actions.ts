@@ -52,6 +52,7 @@ export async function editarJugadorTutor(
     dniNie: formData.get("dniNie") || "",
     email: formData.get("email") || "",
     telefono: formData.get("telefono") || "",
+    telefonoAlternativo: formData.get("telefonoAlternativo") || "",
     direccion: formData.get("direccion") || "",
   });
 
@@ -115,6 +116,7 @@ export async function editarJugadorTutor(
       dniNie: data.dniNie || null,
       email: emailNorm,
       telefono: data.telefono || null,
+      telefonoAlternativo: data.telefonoAlternativo || null,
       direccion: data.direccion || null,
       sexo: sexoValido,
     },

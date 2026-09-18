@@ -13,6 +13,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npx prisma generate && npm run build
+RUN node scripts/copy-runtime-deps.js /runtime-node_modules \
+    @prisma/adapter-pg pg @azure/identity @azure/postgresql-auth
 
 FROM base AS runner
 WORKDIR /app
@@ -27,6 +29,9 @@ COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
+# Dependencias usadas directamente por los scripts de arranque para PostgreSQL
+# con Microsoft Entra ID. Next standalone no rastrea esos scripts externos.
+COPY --from=builder --chown=nextjs:nodejs /runtime-node_modules ./node_modules
 # pdfkit (Standard PDF fonts como Helvetica, Helvetica-Bold) - necesarios en runtime
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/pdfkit ./node_modules/pdfkit
 COPY --from=builder --chown=nextjs:nodejs /app/scripts ./scripts

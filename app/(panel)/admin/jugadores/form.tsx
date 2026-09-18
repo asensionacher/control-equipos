@@ -19,7 +19,7 @@ interface Tutor {
   id: string;
   nombre: string;
   apellidos: string;
-  email: string;
+  email: string | null;
 }
 
 interface JugadorData {
@@ -30,6 +30,7 @@ interface JugadorData {
   dniNie: string | null;
   email: string | null;
   telefono: string | null;
+  telefonoAlternativo: string | null;
   direccion: string | null;
   fotoUrl: string | null;
   sexo: "MASCULINO" | "FEMENINO" | "OTRO" | null;
@@ -76,6 +77,7 @@ export function JugadorForm({ jugador, tutores }: Props) {
       dniNie: ((formData.get("dniNie") as string) || "").trim() || null,
       email: ((formData.get("email") as string) || "").trim() || null,
       telefono: ((formData.get("telefono") as string) || "").trim() || null,
+      telefonoAlternativo: ((formData.get("telefonoAlternativo") as string) || "").trim() || null,
       direccion: ((formData.get("direccion") as string) || "").trim() || null,
       sexo: (sexo || null) as "MASCULINO" | "FEMENINO" | "OTRO" | null,
       tutorUsuarioId: tutorId || null,
@@ -215,6 +217,19 @@ export function JugadorForm({ jugador, tutores }: Props) {
             </div>
           </div>
 
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="telefonoAlternativo">Teléfono alternativo</Label>
+              <Input
+                id="telefonoAlternativo"
+                name="telefonoAlternativo"
+                type="tel"
+                defaultValue={jugador?.telefonoAlternativo ?? ""}
+              />
+            </div>
+            <div />
+          </div>
+
           <div className="space-y-2">
             <Label htmlFor="direccion">Dirección</Label>
             <Textarea id="direccion" name="direccion" rows={2} defaultValue={jugador?.direccion ?? ""} />
@@ -239,9 +254,12 @@ export function JugadorForm({ jugador, tutores }: Props) {
             <Alert variant="info">
             <AlertDescription>
               Opcional. Si el jugador es menor o quieres que un padre gestione su ficha, selecciónalo
-              de la lista. Si no existe, créalo primero desde la sección{" "}
-              <Link href="/admin/padres/nuevo" className="underline font-medium">
-                Padres
+              de la lista. Si no existe, créalo primero desde{" "}
+              <Link
+                href="/admin/usuarios/nuevo?roles=padre"
+                className="underline font-medium"
+              >
+                Usuarios (nuevo)
               </Link>
               . Si el jugador es mayor y debe gestionar su propia ficha, déjalo sin tutor y
               después, desde su ficha, podrás generar una activación de cuenta con su email.

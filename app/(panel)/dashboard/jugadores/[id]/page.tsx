@@ -111,6 +111,13 @@ export default async function FichaJugadorUsuarioPage({ params, searchParams }: 
   const esTutor = Boolean(jugador?.tutorias.length);
   if (!jugador || (!esTutor && !esPropia)) notFound();
 
+  // Regla: si el jugador tiene tutor asignado, el jugador propietario no
+  // puede acceder por su cuenta: lo gestiona el tutor.
+  const jugadorConTutor = esPropia && esTutor;
+  if (jugadorConTutor) {
+    redirect("/dashboard");
+  }
+
   const temporadaSeleccionada =
     temporadas.find(({ id: temporadaId }) => temporadaId === temporadaSolicitada) ??
     temporadas.find(({ activa }) => activa) ??
@@ -243,6 +250,7 @@ export default async function FichaJugadorUsuarioPage({ params, searchParams }: 
           <Campo label="DNI/NIE" valor={jugador.dniNie} />
           <Campo label="Email" valor={datosPersonales.email} />
           <Campo label="Teléfono" valor={datosPersonales.telefono} />
+          <Campo label="Teléfono alternativo" valor={datosPersonales.telefonoAlternativo} />
           <Campo label="Dirección" valor={jugador.direccion} className="sm:col-span-2" />
         </CardContent>
       </Card>

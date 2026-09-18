@@ -48,6 +48,7 @@ export default async function EditarJugadorPage({ params }: PageProps) {
           dniNie: jugador.dniNie,
           email: jugador.email,
           telefono: jugador.telefono,
+          telefonoAlternativo: jugador.telefonoAlternativo,
           direccion: jugador.direccion,
           fotoUrl: jugador.fotoUrl,
           sexo: jugador.sexo,

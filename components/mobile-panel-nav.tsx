@@ -14,6 +14,7 @@ const gruposAdmin = [
     enlaces: [
       { href: "/admin/jugadores", label: "Jugadores" },
       { href: "/admin/padres", label: "Familias" },
+      { href: "/admin/entrenadores", label: "Entrenadores" },
       { href: "/admin/equipos", label: "Equipos" },
     ],
   },

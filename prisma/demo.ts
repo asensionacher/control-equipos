@@ -460,6 +460,102 @@ async function main() {
     where: { destinatario: { endsWith: "@demo.example" }, enviadoAt: null },
   });
 
+  // === Entrenadores de demo ===
+  // 1) Carlos: entrenador principal de Alevín A y Cadete A, también tiene cuenta para entrar al portal.
+  // 2) Lucía: entrenadora de Infantil A, sin cuenta propia en el sistema.
+  const entrenadoresDemo: Array<{
+    email: string;
+    nombre: string;
+    apellidos: string;
+    telefono: string;
+    telefonoAlternativo?: string;
+    equiposNombres: string[];
+  }> = [
+    {
+      email: "carlos.entrenador@demo.example",
+      nombre: "Carlos",
+      apellidos: "Domínguez Pino",
+      telefono: "600200001",
+      telefonoAlternativo: "911223344",
+      equiposNombres: ["Alevín A", "Cadete A"],
+    },
+    {
+      email: "lucia.entrenador@demo.example",
+      nombre: "Lucía",
+      apellidos: "Vidal Crespo",
+      telefono: "600200002",
+      equiposNombres: ["Infantil A"],
+    },
+  ];
+
+  let entrenadoresCreados = 0;
+  for (const ent of entrenadoresDemo) {
+    const usuario = await prisma.usuario.upsert({
+      where: { email: ent.email },
+      update: {
+        nombre: ent.nombre,
+        apellidos: ent.apellidos,
+        telefono: ent.telefono,
+        telefonoAlternativo: ent.telefonoAlternativo ?? null,
+        passwordHash,
+        emailVerificado: true,
+      },
+      create: {
+        email: ent.email,
+        nombre: ent.nombre,
+        apellidos: ent.apellidos,
+        telefono: ent.telefono,
+        telefonoAlternativo: ent.telefonoAlternativo ?? null,
+        passwordHash,
+        rol: "USUARIO",
+        emailVerificado: true,
+      },
+    });
+
+    const entrenador = await prisma.entrenador.upsert({
+      where: { usuarioId: usuario.id },
+      update: {
+        nombre: ent.nombre,
+        apellidos: ent.apellidos,
+        email: ent.email,
+        telefono: ent.telefono,
+        telefonoAlternativo: ent.telefonoAlternativo ?? null,
+        activo: true,
+      },
+      create: {
+        nombre: ent.nombre,
+        apellidos: ent.apellidos,
+        email: ent.email,
+        telefono: ent.telefono,
+        telefonoAlternativo: ent.telefonoAlternativo ?? null,
+        usuarioId: usuario.id,
+        creadoPorId: admin.id,
+      },
+    });
+    entrenadoresCreados++;
+
+    for (const nombreEq of ent.equiposNombres) {
+      const equipoId = equiposCreados.get(nombreEq);
+      if (!equipoId) continue;
+      await prisma.entrenadorEquipo.upsert({
+        where: {
+          entrenadorId_equipoId_rol: {
+            entrenadorId: entrenador.id,
+            equipoId,
+            rol: "ENTRENADOR_PRINCIPAL",
+          },
+        },
+        update: {},
+        create: {
+          entrenadorId: entrenador.id,
+          equipoId,
+          rol: "ENTRENADOR_PRINCIPAL",
+          temporadaId: temporada.id,
+        },
+      });
+    }
+  }
+
   console.log(
     JSON.stringify(
       {
@@ -467,6 +563,7 @@ async function main() {
         jugadores: jugadoresCreados.length,
         equipos: equipos.length,
         recibosDemo: 4,
+        entrenadoresDemo: entrenadoresCreados,
         notificacionesEliminadas: notificacionesDemo.count,
         accesoDemo: {
           emails: "Cualquier dirección @demo.example creada por este script",

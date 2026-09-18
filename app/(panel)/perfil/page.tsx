@@ -35,7 +35,7 @@ export default async function PerfilPage() {
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
             {usuario.nombre} {usuario.apellidos}
           </h1>
-          <p className="text-sm text-muted-foreground">{usuario.email}</p>
+          <p className="text-sm text-muted-foreground">{usuario.email ?? "Sin email"}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
             <Badge variant={usuario.rol === "ADMIN" ? "default" : "secondary"}>{usuario.rol}</Badge>
             <span className="text-muted-foreground">
@@ -64,6 +64,7 @@ export default async function PerfilPage() {
               apellidos: usuario.apellidos,
               email: usuario.email,
               telefono: usuario.telefono,
+              telefonoAlternativo: usuario.telefonoAlternativo,
             }}
           />
         </CardContent>

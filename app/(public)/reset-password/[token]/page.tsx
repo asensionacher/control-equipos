@@ -19,6 +19,7 @@ export default async function ResetPasswordPage({ params }: PageProps) {
   if (!tokenRecord || tokenRecord.usado || tokenRecord.expiresAt < new Date()) {
     notFound();
   }
+  if (!tokenRecord.usuario.email) notFound();
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 p-4">

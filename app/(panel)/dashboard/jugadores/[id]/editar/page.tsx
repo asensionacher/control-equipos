@@ -29,6 +29,11 @@ export default async function EditarJugadorTutorPage({ params }: PageProps) {
   const esTutor = jugador.tutorias.length > 0;
   if (!esTutor && !esPropia) notFound();
 
+  // Si es jugador propio y tiene tutor, el tutor gestiona los cambios.
+  if (esPropia && esTutor) {
+    redirect("/dashboard");
+  }
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <Link
@@ -49,6 +54,7 @@ export default async function EditarJugadorTutorPage({ params }: PageProps) {
           dniNie: jugador.dniNie,
           email: jugador.email,
           telefono: jugador.telefono,
+          telefonoAlternativo: jugador.telefonoAlternativo,
           direccion: jugador.direccion,
           fotoUrl: jugador.fotoUrl,
           sexo: jugador.sexo,

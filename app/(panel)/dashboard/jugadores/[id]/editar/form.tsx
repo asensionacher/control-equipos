@@ -21,6 +21,7 @@ interface JugadorData {
   dniNie: string | null;
   email: string | null;
   telefono: string | null;
+  telefonoAlternativo: string | null;
   direccion: string | null;
   fotoUrl: string | null;
   sexo: "MASCULINO" | "FEMENINO" | "OTRO" | null;
@@ -163,6 +164,19 @@ export function JugadorEditTutorForm({ jugador }: Props) {
               <Label htmlFor="telefono">Teléfono</Label>
               <Input id="telefono" name="telefono" type="tel" defaultValue={jugador.telefono ?? ""} />
             </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="telefonoAlternativo">Teléfono alternativo</Label>
+              <Input
+                id="telefonoAlternativo"
+                name="telefonoAlternativo"
+                type="tel"
+                defaultValue={jugador.telefonoAlternativo ?? ""}
+              />
+            </div>
+            <div />
           </div>
 
           <div className="space-y-2">

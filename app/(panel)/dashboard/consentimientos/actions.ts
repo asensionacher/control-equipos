@@ -52,7 +52,8 @@ export async function firmarConsentimiento(
   if (!asignacion || !firmante) return { error: "Consentimiento no encontrado" };
   const autorizado =
     asignacion.jugador.usuarioId === session.user.id ||
-    asignacion.jugador.tutorias.length > 0;
+    (asignacion.jugador.usuarioId !== session.user.id &&
+      asignacion.jugador.tutorias.length > 0);
   if (!autorizado) return { error: "No autorizado" };
   if (asignacion.estado === "FIRMADO") return { error: "El consentimiento ya está firmado" };
 
@@ -72,6 +73,7 @@ export async function firmarConsentimiento(
         nombre: firmadoPorNombre,
         email: firmante.email,
         esTutor:
+          asignacion.jugador.usuarioId !== null &&
           asignacion.jugador.usuarioId !== session.user.id &&
           asignacion.jugador.tutorias.length > 0,
       },

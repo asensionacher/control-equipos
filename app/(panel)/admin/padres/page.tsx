@@ -56,7 +56,7 @@ export default async function PadresPage({ searchParams }: PageProps) {
           </p>
         </div>
         <Button asChild>
-          <Link href="/admin/padres/nuevo">
+          <Link href="/admin/usuarios/nuevo?roles=padre">
             <Plus className="h-4 w-4" />
             Nuevo padre
           </Link>
@@ -129,10 +129,15 @@ export default async function PadresPage({ searchParams }: PageProps) {
                           {p.telefono && (
                             <div className="text-xs text-muted-foreground">{p.telefono}</div>
                           )}
+                          {p.telefonoAlternativo && (
+                            <div className="text-xs text-muted-foreground">
+                              {p.telefonoAlternativo}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </TableCell>
-                    <TableCell className="hidden md:table-cell">{p.email}</TableCell>
+                    <TableCell className="hidden md:table-cell">{p.email ?? "—"}</TableCell>
                     <TableCell>
                       {p.passwordHash ? (
                         <Badge variant="success">Activo</Badge>

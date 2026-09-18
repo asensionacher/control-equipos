@@ -10,6 +10,7 @@ const registroSchema = z.object({
   apellidos: z.string().min(2),
   email: z.string().email().toLowerCase(),
   telefono: z.string().optional(),
+  telefonoAlternativo: z.string().optional(),
   password: z.string().min(8),
 });
 
@@ -24,6 +25,7 @@ export async function registrarPrimerAdmin(formData: FormData) {
     apellidos: formData.get("apellidos"),
     email: formData.get("email"),
     telefono: formData.get("telefono") || undefined,
+    telefonoAlternativo: formData.get("telefonoAlternativo") || undefined,
     password: formData.get("password"),
   });
 
@@ -44,6 +46,7 @@ export async function registrarPrimerAdmin(formData: FormData) {
       apellidos: parsed.data.apellidos,
       email: parsed.data.email,
       telefono: parsed.data.telefono,
+      telefonoAlternativo: parsed.data.telefonoAlternativo,
       passwordHash,
       rol: "ADMIN",
       emailVerificado: true,

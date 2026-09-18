@@ -14,7 +14,7 @@ interface GenerarPdfConsentimientoParams {
   };
   firmante: {
     nombre: string;
-    email: string;
+    email: string | null;
     esTutor: boolean;
   };
   firmadoAt: Date;
@@ -202,7 +202,7 @@ export async function generarPdfConsentimiento({
       doc.moveDown(1);
       doc.font("Helvetica-Bold").text("Firmante");
       doc.font("Helvetica").text(firmante.nombre);
-      doc.text(firmante.email);
+      doc.text(firmante.email ?? "");
       doc.text(
         firmante.esTutor
           ? "Actúa como tutor o responsable del jugador"

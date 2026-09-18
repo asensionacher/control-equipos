@@ -11,7 +11,7 @@ Sistema web responsive para la gestión de equipos, jugadores y temporadas.
 - **TailwindCSS + shadcn/ui** para UI responsive
 - **Resend + React Email** para envío de invitaciones
 - **Zod** para validación
-- **MinIO + AWS SDK v3** para almacenamiento privado de PDFs (S3-compatible)
+- **MinIO/S3 o Azure Blob Storage** para almacenamiento privado de archivos
 - **PDFKit** para generar los PDFs de los recibos
 
 ## Características
@@ -24,10 +24,10 @@ Sistema web responsive para la gestión de equipos, jugadores y temporadas.
 - Sistema de invitaciones por link para vincular jugadores a tutores
 - Búsqueda de jugadores por nombre, apellidos o año de nacimiento
 - **Emisión de recibos** asignados a uno o varios equipos o a jugadores individuales, con asignaciones editables después de emitirlos. Cada asignación `ReciboJugador` recibe su propio número oficial autoincremental (`#001234`). Los nuevos jugadores de un equipo heredan automáticamente sus recibos y el administrador puede registrar pagos individuales o masivos.
-- **Solicitud de documentos** para uno o varios equipos o para jugadores concretos. Los nuevos jugadores de un equipo heredan sus solicitudes; el jugador/tutor sube el PDF y el administrador puede validarlo individualmente o en bloque. Al rechazarlo se elimina de S3 y se solicita una nueva subida.
+- **Solicitud de documentos** para uno o varios equipos o para jugadores concretos. Los nuevos jugadores de un equipo heredan sus solicitudes; el jugador/tutor sube el PDF y el administrador puede validarlo individualmente o en bloque. Al rechazarlo se elimina del almacenamiento privado y se solicita una nueva subida.
 - **Consentimientos globales** asignados automáticamente a todos los jugadores actuales y futuros. Su descripción admite texto enriquecido seguro (negrita, cursiva, subrayado, listas, tamaños y colores), que se conserva en el PDF privado generado al firmar. La firma queda resuelta sin validación adicional y el administrador puede revocarla.
 - **Avisos por email agrupados** para recibos, documentos, consentimientos y otras novedades operativas. Los eventos próximos en el tiempo y los distintos hijos de un mismo destinatario se concentran en un único resumen; activaciones de cuenta y cambios de contraseña siempre se envían de forma individual e inmediata.
-- **Almacenamiento S3 privado** (MinIO en Docker) para recibos, justificantes, documentos y consentimientos firmados, servido siempre a través de rutas autenticadas.
+- **Almacenamiento privado configurable** (S3/MinIO o Azure Blob Storage) para recibos, justificantes, documentos y consentimientos firmados, servido siempre a través de rutas autenticadas.
 - Panel de administración con estadísticas
 - Ficha del jugador visible para el propio jugador o su tutor
 - Diseño 100% responsive
@@ -45,11 +45,49 @@ Sistema web responsive para la gestión de equipos, jugadores y temporadas.
    ```
    Edita `.env` y rellena al menos `AUTH_SECRET` (genera uno con `openssl rand -base64 32`).
 
+   El proveedor de archivos se elige con `STORAGE_PROVIDER=s3` (predeterminado)
+   o `STORAGE_PROVIDER=azure`. En Azure usa la identidad administrada de App Service:
+   ```bash
+   STORAGE_PROVIDER=azure
+   AZURE_STORAGE_AUTH_MODE=managed-identity
+   AZURE_STORAGE_ACCOUNT_URL=https://cuenta.blob.core.windows.net
+   AZURE_STORAGE_CONTAINER=control-equipos-documents
+   ```
+   El contenedor de Azure se crea como privado automáticamente si no existe.
+   Cambiar de proveedor no migra los archivos existentes; las claves guardadas en
+   PostgreSQL deben existir también en el nuevo bucket o contenedor.
+
+   Para Azure Database for PostgreSQL con la misma identidad administrada:
+   ```bash
+   DATABASE_AUTH_MODE=azure-managed-identity
+   AZURE_POSTGRES_HOST=servidor.postgres.database.azure.com
+   AZURE_POSTGRES_PORT=5432
+   AZURE_POSTGRES_DATABASE=control_equipos
+   AZURE_POSTGRES_USER=nombre-identidad-administrada
+   AZURE_POSTGRES_SCHEMA=public
+   ```
+   Si usas una identidad asignada por el usuario, añade
+   `AZURE_MANAGED_IDENTITY_CLIENT_ID`; con una identidad asignada por el sistema
+   debe quedar vacío. Fuera de Azure usa `DATABASE_AUTH_MODE=password`. Para
+   probar Blob Storage con Azurite o una connection string usa
+   `AZURE_STORAGE_AUTH_MODE=connection-string`.
+
+   En Azure debes asignar a la identidad de App Service el rol
+   **Storage Blob Data Contributor** sobre la cuenta o el contenedor. En
+   PostgreSQL Flexible Server, activa Microsoft Entra authentication, configura
+   un administrador Entra y crea el principal:
+   ```sql
+   SELECT * FROM pgaadauth_create_principal('nombre-identidad-administrada', false, false);
+   ```
+   Después concédele permisos sobre la base de datos y el esquema. El arranque
+   actual ejecuta `prisma db push`, por lo que esa identidad necesita permisos
+   DDL además de lectura y escritura.
+
 2. **Arrancar los contenedores:**
    ```bash
    docker compose up -d --build
    ```
-   Esto levantará PostgreSQL, MinIO (S3 privado) y la aplicación. La primera vez descargará imágenes y compilará la app (puede tardar varios minutos).
+   Esto levantará PostgreSQL, MinIO y la aplicación. La primera vez descargará imágenes y compilará la app (puede tardar varios minutos). Si usas Azure y no quieres levantar MinIO, ejecuta `docker compose up -d --build db app`.
 
    MinIO expone su API en `${S3_PORT:-9000}` y la consola web en `http://localhost:${S3_CONSOLE_PORT:-9001}` (credenciales por defecto: `control-equipos` / `control-equipos-secret`). Los datos se persisten en `${S3_DATA_DIR:-~/.control-equipos/s3-data}`. El bucket por defecto es `control-equipos-documents` y queda configurado como privado.
 
@@ -173,7 +211,8 @@ emails/                      # Plantillas React Email
 lib/
 ├── auth.ts, auth.config.ts  # NextAuth
 ├── prisma.ts                # Cliente Prisma
-├── s3.ts                    # Cliente S3 / MinIO
+├── storage.ts               # Almacenamiento S3/MinIO o Azure Blob
+├── s3.ts                    # Reexportación compatible del almacenamiento
 ├── pdf-recibo.ts            # Generador de PDFs de recibos (formato español)
 ├── recibo-utils.ts          # Cálculos + métodos de pago
 ├── jugador-sync.ts          # Sincronización Jugador ↔ Usuario

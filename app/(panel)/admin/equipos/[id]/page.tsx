@@ -11,6 +11,7 @@ import { calcularEdad, iniciales } from "@/lib/utils";
 import { AsignacionMasiva } from "./asignacion-masiva";
 import { obtenerFotoJugadorSrc } from "@/lib/imagen-upload";
 import { HorariosEntrenamiento } from "@/components/horarios-entrenamiento";
+import { UserCog } from "lucide-react";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -33,6 +34,11 @@ export default async function FichaEquipoPage({ params }: PageProps) {
           jugador: true,
         },
         orderBy: { jugador: { apellidos: "asc" } },
+      },
+      entrenadoresAsignaciones: {
+        include: {
+          entrenador: true,
+        },
       },
     },
   });
@@ -102,6 +108,41 @@ export default async function FichaEquipoPage({ params }: PageProps) {
         </CardHeader>
         <CardContent>
           <HorariosEntrenamiento equipos={[equipo]} soloActivos={false} />
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <UserCog className="h-5 w-5" />
+            Cuerpo técnico
+          </CardTitle>
+          <CardDescription>
+            Entrenadores asignados a este equipo. Se configuran desde su ficha.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {equipo.entrenadoresAsignaciones.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              Este equipo aún no tiene entrenadores asignados.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {equipo.entrenadoresAsignaciones.map((a) => (
+                <li key={a.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
+                  <Link
+                    href={`/admin/entrenadores/${a.entrenador.id}`}
+                    className="font-medium hover:underline"
+                  >
+                    {a.entrenador.nombre} {a.entrenador.apellidos}
+                  </Link>
+                  {a.entrenador.telefono && (
+                    <span className="text-xs text-muted-foreground">{a.entrenador.telefono}</span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
         </CardContent>
       </Card>
 

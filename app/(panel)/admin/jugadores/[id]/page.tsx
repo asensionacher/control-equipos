@@ -193,6 +193,7 @@ export default async function FichaJugadorPage({ params }: PageProps) {
             <Campo label="Sexo" valor={jugador.sexo ? jugador.sexo.toLowerCase() : null} />
             <Campo label="Email" valor={datosPersonales.email} />
             <Campo label="Teléfono" valor={datosPersonales.telefono} />
+            <Campo label="Teléfono alternativo" valor={datosPersonales.telefonoAlternativo} />
             <Campo label="Dirección" valor={jugador.direccion} />
           </CardContent>
         </Card>

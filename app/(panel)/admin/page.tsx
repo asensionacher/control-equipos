@@ -81,10 +81,7 @@ export default async function AdminDashboardPage() {
         </div>
         <div className="flex flex-wrap gap-2">
           <Button asChild>
-            <Link href="/admin/jugadores/nuevo">Nuevo jugador</Link>
-          </Button>
-          <Button asChild variant="outline">
-            <Link href="/admin/padres/nuevo">Nuevo padre</Link>
+            <Link href="/admin/usuarios/nuevo">Nuevo usuario</Link>
           </Button>
           <Button asChild variant="outline">
             <Link href="/admin/equipos/nuevo">Nuevo equipo</Link>

@@ -1,9 +1,9 @@
-const { PrismaClient } = require("@prisma/client");
 const path = require("path");
 const fs = require("fs");
+const { createPrismaClient, getPrismaCliDatabaseUrl } = require("./prisma-client");
 
 async function waitForDb() {
-  const prisma = new PrismaClient();
+  const prisma = createPrismaClient();
   const maxAttempts = 30;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -22,7 +22,7 @@ async function waitForDb() {
   process.exit(1);
 }
 
-function runPrismaPush() {
+async function runPrismaPush() {
   const { execFileSync } = require("child_process");
   // Buscar el binario de prisma dentro del standalone bundle
   const candidates = [
@@ -44,15 +44,19 @@ function runPrismaPush() {
   }
 
   console.log("[db] Sincronizando schema...");
+  const databaseUrl = await getPrismaCliDatabaseUrl();
   execFileSync("node", [prismaBin, "db", "push", "--skip-generate", "--accept-data-loss"], {
     stdio: "inherit",
-    env: process.env,
+    env: {
+      ...process.env,
+      ...(databaseUrl ? { DATABASE_URL: databaseUrl } : {}),
+    },
   });
 }
 
 async function main() {
   await waitForDb();
-  runPrismaPush();
+  await runPrismaPush();
 
   const { startEmailDigestWorker } = require("./email-digest-worker");
   startEmailDigestWorker();

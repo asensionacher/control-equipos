@@ -73,7 +73,7 @@ export default async function JugadoresPage({ searchParams }: PageProps) {
           <p className="text-sm text-muted-foreground">Listado completo de jugadores del club</p>
         </div>
         <Button asChild>
-          <Link href="/admin/jugadores/nuevo">
+          <Link href="/admin/usuarios/nuevo?roles=jugador">
             <Plus className="h-4 w-4" />
             Nuevo jugador
           </Link>

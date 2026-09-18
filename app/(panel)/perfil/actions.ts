@@ -22,6 +22,7 @@ export async function actualizarPerfil(
     nombre: formData.get("nombre"),
     apellidos: formData.get("apellidos"),
     telefono: formData.get("telefono") || "",
+    telefonoAlternativo: formData.get("telefonoAlternativo") || "",
   });
 
   if (!parsed.success) {
@@ -34,6 +35,7 @@ export async function actualizarPerfil(
       nombre: parsed.data.nombre,
       apellidos: parsed.data.apellidos,
       telefono: parsed.data.telefono || null,
+      telefonoAlternativo: parsed.data.telefonoAlternativo || null,
       // El email NO se puede cambiar desde aquí. Solo un admin puede hacerlo.
     },
   });

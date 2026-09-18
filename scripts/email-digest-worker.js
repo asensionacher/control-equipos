@@ -1,6 +1,6 @@
-const { PrismaClient } = require("@prisma/client");
+const { createPrismaClient } = require("./prisma-client");
 
-const prisma = new PrismaClient();
+const prisma = createPrismaClient();
 const appName = process.env.NEXT_PUBLIC_APP_NAME || "Control de Equipos";
 const emailFrom = process.env.EMAIL_FROM || "Control de Equipos <noreply@example.com>";
 const resendApiKey = process.env.RESEND_API_KEY || "";

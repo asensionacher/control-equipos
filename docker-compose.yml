@@ -60,12 +60,17 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      s3:
-        condition: service_healthy
-      s3-init:
-        condition: service_completed_successfully
     environment:
       DATABASE_URL: "postgresql://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-admin123}@db:5432/${POSTGRES_DB:-control_equipos}?schema=public"
+      DATABASE_AUTH_MODE: "${DATABASE_AUTH_MODE:-password}"
+      DATABASE_POOL_MAX: "${DATABASE_POOL_MAX:-10}"
+      AZURE_POSTGRES_HOST: "${AZURE_POSTGRES_HOST:-}"
+      AZURE_POSTGRES_PORT: "${AZURE_POSTGRES_PORT:-5432}"
+      AZURE_POSTGRES_DATABASE: "${AZURE_POSTGRES_DATABASE:-}"
+      AZURE_POSTGRES_USER: "${AZURE_POSTGRES_USER:-}"
+      AZURE_POSTGRES_SCHEMA: "${AZURE_POSTGRES_SCHEMA:-public}"
+      AZURE_POSTGRES_SSL_REJECT_UNAUTHORIZED: "${AZURE_POSTGRES_SSL_REJECT_UNAUTHORIZED:-true}"
+      AZURE_MANAGED_IDENTITY_CLIENT_ID: "${AZURE_MANAGED_IDENTITY_CLIENT_ID:-}"
       AUTH_SECRET: "${AUTH_SECRET:-cambia-esto-por-una-clave-segura-de-al-menos-32-caracteres}"
       AUTH_URL: "${AUTH_URL:-http://localhost:3000}"
       RESEND_API_KEY: "${RESEND_API_KEY:-}"
@@ -73,14 +78,19 @@ services:
       EMAIL_DIGEST_WINDOW_SECONDS: "${EMAIL_DIGEST_WINDOW_SECONDS:-120}"
       EMAIL_DIGEST_POLL_SECONDS: "${EMAIL_DIGEST_POLL_SECONDS:-30}"
       NEXT_PUBLIC_APP_NAME: "${NEXT_PUBLIC_APP_NAME:-Control de Equipos}"
-      # S3 / MinIO
-      # El hostname s3 solo existe dentro de la red de Docker.
+      STORAGE_PROVIDER: "${STORAGE_PROVIDER:-s3}"
+      # S3 / MinIO. El hostname s3 solo existe dentro de la red de Docker.
       S3_ENDPOINT: "http://s3:9000"
       S3_REGION: "${S3_REGION:-eu-west-1}"
       S3_ACCESS_KEY: "${S3_ACCESS_KEY:-control-equipos}"
       S3_SECRET_KEY: "${S3_SECRET_KEY:-control-equipos-secret}"
       S3_BUCKET: "${S3_BUCKET:-control-equipos-documents}"
       S3_FORCE_PATH_STYLE: "${S3_FORCE_PATH_STYLE:-true}"
+      # Azure Blob Storage
+      AZURE_STORAGE_AUTH_MODE: "${AZURE_STORAGE_AUTH_MODE:-managed-identity}"
+      AZURE_STORAGE_ACCOUNT_URL: "${AZURE_STORAGE_ACCOUNT_URL:-}"
+      AZURE_STORAGE_CONNECTION_STRING: "${AZURE_STORAGE_CONNECTION_STRING:-}"
+      AZURE_STORAGE_CONTAINER: "${AZURE_STORAGE_CONTAINER:-control-equipos-documents}"
       NODE_ENV: production
     ports:
       - "${APP_PORT:-3000}:3000"

@@ -8,9 +8,10 @@ import { Badge } from "@/components/ui/badge";
 import { calcularEdad, formatearFecha, iniciales } from "@/lib/utils";
 import Link from "next/link";
 import { Users, UserCircle } from "lucide-react";
-import { getDatosPersonales } from "@/lib/jugador-sync";
+import { getDatosPersonales, jugadorTieneAccesoPortalPropio } from "@/lib/jugador-sync";
 import { obtenerFotoJugadorSrc } from "@/lib/imagen-upload";
 import { HorariosEntrenamiento } from "@/components/horarios-entrenamiento";
+import { SeccionEntrenamientos } from "./_components/seccion-entrenamientos";
 
 export const dynamic = "force-dynamic";
 
@@ -37,24 +38,30 @@ export default async function DashboardUsuarioPage() {
         },
       },
     }),
-    prisma.jugador.findUnique({
-      where: { usuarioId: session.user.id },
-      include: {
-        asignaciones: {
-          include: {
-            equipo: {
-              include: {
-                temporada: true,
-                horariosEntrenamiento: {
-                  orderBy: [{ diaSemana: "asc" }, { minutoInicio: "asc" }],
-                },
+prisma.jugador.findUnique({
+    where: { usuarioId: session.user.id },
+    include: {
+      asignaciones: {
+        include: {
+          equipo: {
+            include: {
+              temporada: true,
+              horariosEntrenamiento: {
+                orderBy: [{ diaSemana: "asc" }, { minutoInicio: "asc" }],
               },
             },
           },
         },
       },
-    }),
-  ]);
+    },
+  }),
+]);
+
+  // Determinar si el usuario puede usar el portal como jugador propio
+  const jugadorPropioId = jugadorPropioRaw?.id;
+  const puedeUsarComoJugadorPropio = jugadorPropioId
+    ? await jugadorTieneAccesoPortalPropio(jugadorPropioId)
+    : false;
 
   // Sincronizar datos personales para todos los jugadores que se muestran
   const datosMisJugadores = await Promise.all(
@@ -81,7 +88,7 @@ export default async function DashboardUsuarioPage() {
         </p>
       </div>
 
-      {datosJugadorPropio && (
+      {datosJugadorPropio && puedeUsarComoJugadorPropio && (
         <Card className="border-blue-200 bg-blue-50/50 dark:bg-blue-950/20 dark:border-blue-900">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -135,6 +142,8 @@ export default async function DashboardUsuarioPage() {
           </CardContent>
         </Card>
       )}
+
+      <SeccionEntrenamientos usuarioId={session.user.id} />
 
       <div>
         <h2 className="mb-4 flex items-center gap-2 text-lg font-semibold">

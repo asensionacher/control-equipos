@@ -61,9 +61,20 @@ export function RegistroAdminForm() {
             <Label htmlFor="email">Email</Label>
             <Input id="email" name="email" type="email" required autoComplete="email" />
           </div>
-          <div className="space-y-2">
-            <Label htmlFor="telefono">Teléfono (opcional)</Label>
-            <Input id="telefono" name="telefono" type="tel" autoComplete="tel" />
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="telefono">Teléfono (opcional)</Label>
+              <Input id="telefono" name="telefono" type="tel" autoComplete="tel" />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="telefonoAlternativo">Teléfono alternativo (opcional)</Label>
+              <Input
+                id="telefonoAlternativo"
+                name="telefonoAlternativo"
+                type="tel"
+                autoComplete="tel"
+              />
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="password">Contraseña</Label>

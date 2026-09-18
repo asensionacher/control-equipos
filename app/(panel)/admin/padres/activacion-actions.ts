@@ -18,6 +18,7 @@ interface CrearPendingPadreParams {
   apellidos: string;
   email: string;
   telefono?: string | null;
+  telefonoAlternativo?: string | null;
   jugadorParaVincularId?: string;
   jugadorParaVincularNombre?: string;
 }
@@ -73,6 +74,7 @@ export async function crearPadreConActivacion(
       nombre: params.nombre,
       apellidos: params.apellidos,
       telefono: params.telefono ?? null,
+      telefonoAlternativo: params.telefonoAlternativo ?? null,
       passwordHash: null,
       rol: "USUARIO",
       emailVerificado: false,
@@ -333,6 +335,9 @@ export async function reenviarActivacionPadre(
   if (!usuario) return { error: "Usuario no encontrado" };
   if (usuario.passwordHash) {
     return { error: "Este usuario ya tiene contraseña. No se puede reenviar activación." };
+  }
+  if (!usuario.email) {
+    return { error: "Este usuario no tiene email. Asígnale uno primero." };
   }
 
   await prisma.pendingRegistration.updateMany({

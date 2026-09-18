@@ -39,6 +39,13 @@ export async function solicitarResetPassword(
     };
   }
 
+  // Si el usuario no tiene email (caso menor sin acceso al portal), no hay nada que enviar.
+  if (!usuario.email) {
+    return {
+      success: "Si el email existe en nuestro sistema, recibirás un enlace para restablecer tu contraseña.",
+    };
+  }
+
   // Invalidar tokens previos no usados del usuario
   await prisma.passwordResetToken.updateMany({
     where: { usuarioId: usuario.id, usado: false },

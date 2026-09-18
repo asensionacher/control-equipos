@@ -72,7 +72,9 @@ export async function enviarNotificacionAJugadores({
   const notificaciones = jugadores.flatMap((jugador) => {
     const destinatarios = new Set<string>();
     if (jugador.usuario?.email) destinatarios.add(jugador.usuario.email);
-    jugador.tutorias.forEach(({ usuario }) => destinatarios.add(usuario.email));
+    jugador.tutorias.forEach(({ usuario }) => {
+      if (usuario.email) destinatarios.add(usuario.email);
+    });
 
     if (destinatarios.size === 0) {
       console.warn("[notificacion] Jugador sin destinatarios:", jugador.id);

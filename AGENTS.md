@@ -2,21 +2,29 @@
 
 Instrucciones para sesiones OpenCode en este repositorio. Solo lo que no se infiere fácilmente leyendo el código o el README.
 
-## Lo que un agente descubre solo
-
-- **Stack**: Next.js 15 (App Router + Server Actions) + PostgreSQL 16 + Prisma 5 + Auth.js v5 beta + Tailwind + shadcn/ui + Resend + Zod.
-- **Comandos básicos**: `npm run dev`, `npm run build`, `npm run lint`, `npm run typecheck`, `npm run db:push`, `npm run db:seed`.
-- **Setup Docker**: `cp .env.example .env` → rellenar `AUTH_SECRET` (`openssl rand -base64 32`) → `docker compose up -d --build`.
-- **Estructura de directorios**: ver `README.md` (ya documentada allí).
-
 ## Lo que un agente NO descubre fácilmente
+
+El README documenta stack, comandos y estructura. Antes de tocar nada, verifica contra el código actual con `git log`/`grep`, porque ese doc puede estar desactualizado. Engines: `package.json` exige Node `22.x` aunque el README mencione 20+. `postinstall` ejecuta `prisma generate` automáticamente, así que un `npm install` en frío no necesita paso extra de cliente.
+
+### `next.config.mjs` tiene dos quirks que rompen si los tocas
+
+- **`serverExternalPackages: ["pdfkit"]`** — pdfkit lee sus `.afm` desde `__dirname`; si el bundler de Next lo empaqueta falla con `ENOENT`. Déjalo externo y asegúrate de que el `Dockerfile` copia `node_modules/pdfkit` (ya lo hace).
+- **`experimental.serverActions.bodySizeLimit: "15mb"`** — fija el límite de subida en Server Actions (justificantes, fotos). Si subes PDFs/fotos grandes, sube esto o divide el flujo en rutas API con su propio `request.formData()`.
+- **`images.remotePatterns`** permite `https://**` — los `<Image>` no fallarán por dominio pero conviene restringir en producción.
+
+### Auth vive en dos archivos por el Edge Runtime
+
+- `lib/auth.config.ts` (30 líneas, Edge-safe, sin Prisma ni bcrypt) → lo importa `middleware.ts`.
+- `lib/auth.ts` (Credentials + Prisma) → solo server actions / API routes.
+
+Importar `lib/auth.ts` desde el middleware revienta el build en Edge. La verificación real contra BD del usuario (`session.user.id`) vive en `app/(panel)/layout.tsx:26`, no en el middleware.
 
 ### Recibos y almacenamiento S3 (CRÍTICO)
 
 - **Numeración de recibos**: `Recibo.id` identifica internamente una emisión/lote. El número oficial autoincremental vive en `ReciboJugador.numero` y se formatea con `formatearNumeroRecibo(numero)` → `#001234`. Cada jugador asignado recibe un número distinto.
 - **Asignación**: un Recibo puede relacionarse con varios equipos mediante `equipos` y simultáneamente con jugadores directos. Los jugadores de un equipo quedan también marcados como asignados directamente para conservar una única asignación deduplicada. Al añadir después un jugador al equipo, `sincronizarAsignacionesJugador` hereda los recibos y documentos asociados. `equipoId` solo conserva compatibilidad con registros antiguos. El estado de pago es individual.
 - **PDFs** se generan con `lib/pdf-recibo.ts` (pdfkit) en formato español: emisor (de `ConfiguracionClub`), nº de recibo, fecha emisión/vencimiento, receptor (tutor o jugador), concepto, base imponible, IVA, total. Si está pagado, incluye fecha de pago, método y referencia.
-- **S3** (MinIO en Docker): claves `recibos/<year>/<id>.pdf` y `justificantes/<year>/<reciboJugadorId>/<timestamp>-<filename>`. El bucket queda **privado** (sin política pública). Nunca se sirven URLs prefirmadas al usuario — siempre se sirve el fichero a través de `/api/recibos/[id]/pdf` y `/api/recibos/jugador/[id]/justificante`, que verifican auth y permisos antes de hacer `getObjectBuffer`.
+- **S3** (MinIO en Docker): claves `recibos/<year>/<id>.pdf` y `justificantes/<year>/<reciboJugadorId>/<timestamp>-<filename>`. El bucket queda **privado** (sin política pública). Nunca se sirven URLs prefirmadas al usuario — siempre se sirve el fichero a través de las rutas API autenticadas (ver abajo), que verifican auth y permisos antes de llamar a `getObjectBuffer` (`lib/s3.ts`).
 - **Datos fiscales del club** viven en `ConfiguracionClub` (singleton `id=1`). Editable desde `/admin/configuracion`.
 - Al crear/anular/marcar pagos: invalidar el PDF cacheado (`invalidarPdfRecibo`) para que se regenere con los nuevos datos.
 - **Permisos del jugador**: el jugador debe tener `usuarioId === session.user.id` O existir una `Tutoria` con `usuarioId === session.user.id` para acceder a un ReciboJugador concreto.
@@ -36,14 +44,19 @@ Los datos personales (nombre, apellidos, email, teléfono) viven duplicados en `
 
 **Regla**: si añades un punto de edición de Usuario, invoca `sincronizarDatosPersonalesUsuario` o los datos del Jugador quedarán desincronizados.
 
-Páginas que ya usan el helper: ficha jugador admin, ficha jugador tutor, dashboard del usuario, ficha del padre.
+`app/(panel)/perfil/actions.ts:42` ya lo invoca; cualquier otro punto de edición nuevo debe hacer lo mismo.
 
-### Auth tiene dos archivos con propósitos distintos
+### Rutas API que sirven ficheros privados (no las reescribas)
 
-- `lib/auth.config.ts` — Edge-safe (sin Prisma ni bcrypt). Lo importa el middleware.
-- `lib/auth.ts` — incluye Credentials provider y Prisma. Lo usan server actions.
+Todas validan sesión y permisos antes de pasar el buffer S3 al cliente (`getObjectBuffer`):
 
-**Por qué importa**: si importas `lib/auth.ts` desde el middleware, bcryptjs rompe Edge Runtime. La verificación contra BD del usuario vive en `app/(panel)/layout.tsx`, no en el middleware.
+- `/api/recibos/[id]/pdf` — PDF del recibo (admin o jugador/tutor afectado).
+- `/api/recibos/jugador/[id]/justificante` — justificante de pago subido.
+- `/api/recibos/zip` — descarga masiva (admin).
+- `/api/documentos/[id]/archivo` — PDF del documento solicitado.
+- `/api/consentimientos/[id]/pdf` — PDF del consentimiento firmado.
+- `/api/jugadores/[id]/foto` — foto del jugador.
+- `/api/club/logo` — logo del club (para la cabecera de los PDFs).
 
 ### Sesión obsoleta tras resetear la BD
 

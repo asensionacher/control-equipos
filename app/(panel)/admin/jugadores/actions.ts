@@ -29,6 +29,7 @@ interface CrearJugadorParams {
     dniNie: string | null;
     email: string | null;
     telefono: string | null;
+    telefonoAlternativo: string | null;
     direccion: string | null;
     sexo: "MASCULINO" | "FEMENINO" | "OTRO" | null;
     tutorUsuarioId: string | null;
@@ -52,6 +53,7 @@ export async function crearJugador(
     dniNie: datos.jugador.dniNie ?? "",
     email: datos.jugador.email ?? "",
     telefono: datos.jugador.telefono ?? "",
+    telefonoAlternativo: datos.jugador.telefonoAlternativo ?? "",
     direccion: datos.jugador.direccion ?? "",
     sexo: datos.jugador.sexo,
     tutorUsuarioId: datos.jugador.tutorUsuarioId ?? "",
@@ -107,6 +109,7 @@ export async function crearJugador(
       dniNie: dni,
       email: data.email || null,
       telefono: data.telefono || null,
+      telefonoAlternativo: data.telefonoAlternativo || null,
       direccion: data.direccion || null,
       sexo: data.sexo,
     },
@@ -126,7 +129,7 @@ export async function crearJugador(
 
     // Enviar email notificando al padre/tutor
     const tutor = await prisma.usuario.findUnique({ where: { id: tutorUsuarioId } });
-    if (tutor) {
+    if (tutor && tutor.email) {
       await encolarNotificacion({
         destinatario: tutor.email,
         titulo: "Nuevo jugador añadido a tu cuenta",
@@ -177,6 +180,7 @@ export async function editarJugador(
     dniNie: datos.dniNie ?? "",
     email: datos.email ?? "",
     telefono: datos.telefono ?? "",
+    telefonoAlternativo: datos.telefonoAlternativo ?? "",
     direccion: datos.direccion ?? "",
     sexo: datos.sexo,
     tutorUsuarioId: datos.tutorUsuarioId ?? "",
@@ -206,6 +210,7 @@ export async function editarJugador(
       dniNie: dni,
       email: data.email || null,
       telefono: data.telefono || null,
+      telefonoAlternativo: data.telefonoAlternativo || null,
       direccion: data.direccion || null,
       sexo: data.sexo,
     },
@@ -224,6 +229,7 @@ export async function editarJugador(
         apellidos: data.apellidos,
         email: data.email || undefined,
         telefono: data.telefono || null,
+        telefonoAlternativo: data.telefonoAlternativo || null,
       },
     });
     // Sincronizar también al Jugador desde Usuario (por si el helper debe prevalecer)
@@ -232,6 +238,7 @@ export async function editarJugador(
       data: {
         email: data.email || null,
         telefono: data.telefono || null,
+        telefonoAlternativo: data.telefonoAlternativo || null,
       },
     });
   }
@@ -311,6 +318,7 @@ export async function editarJugadorTutor(
     dniNie: formData.get("dniNie") || "",
     email: formData.get("email") || "",
     telefono: formData.get("telefono") || "",
+    telefonoAlternativo: formData.get("telefonoAlternativo") || "",
     direccion: formData.get("direccion") || "",
     sexo: sexoValido,
   });
@@ -336,6 +344,7 @@ export async function editarJugadorTutor(
       dniNie: parsed.data.dniNie || null,
       email: parsed.data.email || null,
       telefono: parsed.data.telefono || null,
+      telefonoAlternativo: parsed.data.telefonoAlternativo || null,
       direccion: parsed.data.direccion || null,
       sexo: parsed.data.sexo,
     },
@@ -343,16 +352,17 @@ export async function editarJugadorTutor(
 
   // Si el jugador tiene Usuario propio, sincronizar los datos personales con ese Usuario
   if (jugador.usuarioId) {
-    await prisma.usuario.update({
-      where: { id: jugador.usuarioId },
-      data: {
-        nombre: parsed.data.nombre,
-        apellidos: parsed.data.apellidos,
-        telefono: parsed.data.telefono || null,
-        // Email NO se sincroniza desde aquí (lo gestiona admin)
-      },
-    });
-  }
+      await prisma.usuario.update({
+        where: { id: jugador.usuarioId },
+        data: {
+          nombre: parsed.data.nombre,
+          apellidos: parsed.data.apellidos,
+          telefono: parsed.data.telefono || null,
+          telefonoAlternativo: parsed.data.telefonoAlternativo || null,
+          // Email NO se sincroniza desde aquí (lo gestiona admin)
+        },
+      });
+    }
 
   revalidatePath(`/dashboard/jugadores/${jugadorId}`);
   revalidatePath("/dashboard");

@@ -44,14 +44,16 @@ export default async function FichaPadrePage({ params }: PageProps) {
 
   if (!padre) notFound();
 
-  // Pending registration activa
-  const pending = await prisma.pendingRegistration.findFirst({
-    where: {
-      email: padre.email,
-      usado: false,
-      expiresAt: { gt: new Date() },
-    },
-  });
+  // Pending registration activa (solo si el padre tiene email)
+  const pending = padre.email
+    ? await prisma.pendingRegistration.findFirst({
+        where: {
+          email: padre.email,
+          usado: false,
+          expiresAt: { gt: new Date() },
+        },
+      })
+    : null;
 
   const temporadaActiva = await prisma.temporada.findFirst({
     where: { activa: true },
@@ -80,7 +82,7 @@ export default async function FichaPadrePage({ params }: PageProps) {
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">
             {padre.nombre} {padre.apellidos}
           </h1>
-          <p className="text-sm text-muted-foreground">{padre.email}</p>
+          <p className="text-sm text-muted-foreground">{padre.email ?? "Sin email"}</p>
           <div className="mt-1 flex flex-wrap items-center gap-2 text-xs">
             <Badge variant="secondary">Padre/Tutor</Badge>
             {padre.jugadorComoUsuario && (
@@ -118,6 +120,7 @@ export default async function FichaPadrePage({ params }: PageProps) {
             <Campo label="Nombre completo" valor={`${padre.nombre} ${padre.apellidos}`} />
             <Campo label="Email" valor={padre.email} />
             <Campo label="Teléfono" valor={padre.telefono} />
+            <Campo label="Teléfono alternativo" valor={padre.telefonoAlternativo} />
           </CardContent>
         </Card>
 
@@ -150,9 +153,9 @@ export default async function FichaPadrePage({ params }: PageProps) {
               </CardDescription>
             </div>
             <Button asChild>
-              <Link href={`/admin/jugadores/nuevo?tutorId=${padre.id}`}>
+              <Link href={`/admin/usuarios/${padre.id}`}>
                 <UserPlus className="h-4 w-4" />
-                Vincular nuevo jugador
+                Gestionar como usuario
               </Link>
             </Button>
           </div>

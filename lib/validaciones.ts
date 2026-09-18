@@ -11,6 +11,7 @@ export const registroUsuarioSchema = z
     apellidos: z.string().min(2, "Los apellidos son obligatorios"),
     email: z.string().email("Email inválido"),
     telefono: z.string().optional(),
+    telefonoAlternativo: z.string().optional(),
     password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
     confirmarPassword: z.string(),
   })
@@ -29,6 +30,7 @@ export const jugadorSchema = z.object({
   dniNie: z.string().optional().or(z.literal("")),
   email: z.string().email("Email inválido").optional().or(z.literal("")),
   telefono: z.string().optional().or(z.literal("")),
+  telefonoAlternativo: z.string().optional().or(z.literal("")),
   direccion: z.string().optional().or(z.literal("")),
   sexo: z.enum(["MASCULINO", "FEMENINO", "OTRO"]).optional(),
 
@@ -109,6 +111,7 @@ export const perfilUsuarioSchema = z.object({
   nombre: z.string().min(2, "El nombre es obligatorio"),
   apellidos: z.string().min(2, "Los apellidos son obligatorios"),
   telefono: z.string().optional().or(z.literal("")),
+  telefonoAlternativo: z.string().optional().or(z.literal("")),
 });
 
 export const jugadorEditTutorSchema = z.object({
@@ -118,6 +121,7 @@ export const jugadorEditTutorSchema = z.object({
   dniNie: z.string().optional().or(z.literal("")),
   email: z.string().email("Email inválido").optional().or(z.literal("")),
   telefono: z.string().optional().or(z.literal("")),
+  telefonoAlternativo: z.string().optional().or(z.literal("")),
   direccion: z.string().optional().or(z.literal("")),
   sexo: z.enum(["MASCULINO", "FEMENINO", "OTRO"]).optional(),
 });
@@ -128,6 +132,7 @@ export const padreSchema = z
     apellidos: z.string().min(2, "Los apellidos son obligatorios"),
     email: z.string().email("Email inválido"),
     telefono: z.string().optional().or(z.literal("")),
+    telefonoAlternativo: z.string().optional().or(z.literal("")),
     password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
     confirmarPassword: z.string(),
   })
@@ -273,3 +278,87 @@ export const consentimientoSchema = z.object({
 });
 
 export type ConsentimientoInput = z.infer<typeof consentimientoSchema>;
+
+// === ENTRENADORES ===
+
+export const ROLES_ENTRENADOR = [
+  "ENTRENADOR_PRINCIPAL",
+  "ENTRENADOR_AYUDANTE",
+  "PREPARADOR_FISICO",
+  "COORDINADOR",
+] as const;
+
+export const entrenadorSchema = z.object({
+  nombre: z.string().trim().min(2, "El nombre es obligatorio"),
+  apellidos: z.string().trim().min(2, "Los apellidos son obligatorios"),
+  email: z
+    .string()
+    .email("Email inválido")
+    .optional()
+    .or(z.literal("")),
+  telefono: z.string().optional().or(z.literal("")),
+  telefonoAlternativo: z.string().optional().or(z.literal("")),
+  observaciones: z.string().optional().or(z.literal("")),
+  // Vinculación opcional a cuentas / fichas existentes
+  usuarioId: z.string().optional().or(z.literal("")),
+  jugadorId: z.string().optional().or(z.literal("")),
+});
+
+export type EntrenadorInput = z.infer<typeof entrenadorSchema>;
+
+// === WIZARD UNIFICADO DE USUARIO ===
+
+export const ROLES_USUARIO = ["ADMIN", "USUARIO"] as const;
+
+export const FLAGS_ROL_USUARIO = [
+  "esPadre",
+  "esJugador",
+  "esEntrenador",
+] as const;
+
+export const wizardUsuarioSchema = z
+  .object({
+    nombre: z.string().trim().min(2, "El nombre es obligatorio"),
+    apellidos: z.string().trim().min(2, "Los apellidos son obligatorios"),
+    email: z
+      .string()
+      .trim()
+      .optional()
+      .or(z.literal(""))
+      .refine(
+        (v) => !v || /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v),
+        "Email inválido"
+      ),
+    fechaNacimiento: z.string().optional().or(z.literal("")),
+    dniNie: z.string().optional().or(z.literal("")),
+    telefono: z.string().optional().or(z.literal("")),
+    telefonoAlternativo: z.string().optional().or(z.literal("")),
+    rol: z.enum(ROLES_USUARIO),
+    emailVerificado: z.boolean().optional(),
+
+    // Roles funcionales (se aplican opcionalmente)
+    esPadre: z.boolean().optional().default(false),
+    esJugador: z.boolean().optional().default(false),
+    esEntrenador: z.boolean().optional().default(false),
+
+    // Si esJugador + crearPerfilJugador → crea ficha de jugador nueva
+    crearPerfilJugador: z.boolean().optional().default(true),
+    jugadorExistenteId: z.string().optional().or(z.literal("")),
+
+    // IDs de elementos a asignar (multiselect)
+    jugadoresACargoIds: z.array(z.string()).optional().default([]),
+    equiposComoJugadorIds: z.array(z.string()).optional().default([]),
+    equiposComoEntrenadorIds: z.array(z.string()).optional().default([]),
+  })
+  .refine(
+    (data) =>
+      !data.esJugador ||
+      !data.crearPerfilJugador ||
+      (data.fechaNacimiento && !isNaN(Date.parse(data.fechaNacimiento))),
+    {
+      message: "La fecha de nacimiento es obligatoria para crear la ficha de jugador",
+      path: ["fechaNacimiento"],
+    }
+  );
+
+export type WizardUsuarioInput = z.infer<typeof wizardUsuarioSchema>;
