@@ -5,6 +5,7 @@ const { createPrismaClient, getPrismaCliDatabaseUrl } = require("./prisma-client
 async function waitForDb() {
   const prisma = createPrismaClient();
   const maxAttempts = 30;
+  let lastError;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
@@ -13,13 +14,25 @@ async function waitForDb() {
       await prisma.$disconnect();
       return;
     } catch (err) {
-      console.log(`[db] Esperando conexión (intento ${attempt}/${maxAttempts})...`);
+      lastError = err;
+      const details = [
+        err instanceof Error ? err.name : "Error",
+        err && typeof err === "object" && "code" in err ? `code=${err.code}` : null,
+        err instanceof Error ? err.message : String(err),
+      ]
+        .filter(Boolean)
+        .join(": ");
+      console.error(
+        `[db] Conexión fallida (intento ${attempt}/${maxAttempts}): ${details}`
+      );
       await new Promise((r) => setTimeout(r, 2000));
     }
   }
 
-  console.error("[db] No se pudo conectar a la base de datos");
-  process.exit(1);
+  await prisma.$disconnect();
+  throw new Error("No se pudo conectar a la base de datos después de 30 intentos.", {
+    cause: lastError,
+  });
 }
 
 async function runPrismaPush() {
