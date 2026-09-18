@@ -1,10 +1,17 @@
 "use server";
 
+import bcrypt from "bcryptjs";
+import { render } from "@react-email/render";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { PlantillaPasswordCambiadaAdmin } from "@/emails/plantilla-password-cambiada-admin";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
+import { enviarEmail } from "@/lib/email";
+import { cambioPasswordAdminSchema } from "@/lib/validaciones";
 import { crearPendingYEnviarEmail } from "../nuevo/actions";
+
+const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? "Control de Equipos";
 
 async function requireAdmin() {
   const session = await auth();
@@ -136,6 +143,65 @@ export async function reenviarActivacionUsuario(
 
   revalidatePath(`/admin/usuarios/${usuarioId}`);
   return { success: "Email de activación reenviado." };
+}
+
+export async function cambiarPasswordUsuarioAdmin(
+  usuarioId: string,
+  formData: FormData
+): Promise<{ error?: string; success?: string; warning?: string }> {
+  await requireAdmin();
+
+  const parsed = cambioPasswordAdminSchema.safeParse({
+    passwordNueva: formData.get("passwordNueva"),
+    confirmarPassword: formData.get("confirmarPassword"),
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Datos inválidos" };
+  }
+
+  const usuario = await prisma.usuario.findUnique({
+    where: { id: usuarioId },
+    select: { id: true, nombre: true, email: true },
+  });
+  if (!usuario) return { error: "Usuario no encontrado" };
+  if (!usuario.email) {
+    return { error: "El usuario necesita un email para poder notificar el cambio" };
+  }
+
+  const passwordHash = await bcrypt.hash(parsed.data.passwordNueva, 10);
+  await prisma.$transaction([
+    prisma.usuario.update({
+      where: { id: usuario.id },
+      data: { passwordHash },
+    }),
+    prisma.passwordResetToken.updateMany({
+      where: { usuarioId: usuario.id, usado: false },
+      data: { usado: true, fechaUso: new Date() },
+    }),
+  ]);
+
+  const html = await render(
+    PlantillaPasswordCambiadaAdmin({
+      nombreDestino: usuario.nombre,
+      nombreClub: APP_NAME,
+    })
+  );
+  const resultadoEmail = await enviarEmail({
+    to: usuario.email,
+    subject: `Un administrador ha cambiado tu contraseña en ${APP_NAME}`,
+    html,
+  });
+
+  revalidatePath(`/admin/usuarios/${usuarioId}`);
+  return resultadoEmail.ok
+    ? {
+        success:
+          "Contraseña actualizada. El usuario ha recibido una notificación de seguridad.",
+      }
+    : {
+        success: "Contraseña actualizada.",
+        warning: `No se pudo enviar la notificación: ${resultadoEmail.error ?? "error desconocido"}`,
+      };
 }
 
 export async function cambiarRolUsuario(

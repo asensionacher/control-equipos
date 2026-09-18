@@ -157,6 +157,16 @@ export const cambioPasswordSchema = z
     path: ["confirmarPassword"],
   });
 
+export const cambioPasswordAdminSchema = z
+  .object({
+    passwordNueva: z.string().min(8, "La nueva contraseña debe tener al menos 8 caracteres"),
+    confirmarPassword: z.string(),
+  })
+  .refine((data) => data.passwordNueva === data.confirmarPassword, {
+    message: "Las contraseñas no coinciden",
+    path: ["confirmarPassword"],
+  });
+
 export const recuperarPasswordSchema = z.object({
   email: z.string().email("Email inválido"),
 });

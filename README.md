@@ -124,6 +124,7 @@ Sistema web responsive para la gestión de equipos, jugadores y temporadas.
    AUTH_URL="http://localhost:3000"
    RESEND_API_KEY="re_xxxxxxx"  # Opcional pero recomendado para enviar invitaciones
    EMAIL_FROM="Control Equipos <noreply@tudominio.com>"
+   FCF_TRAINER_DEFAULT_PASSWORD="una-contraseña-inicial-segura"
    ```
 
 3. **Inicializar la base de datos:**
@@ -144,6 +145,9 @@ Sistema web responsive para la gestión de equipos, jugadores y temporadas.
 - Si la base de datos está vacía, aparecerá un botón para registrar el primer administrador.
 - Tras crear el admin, inicia sesión y desde el panel podrás crear temporadas, equipos y jugadores.
 - Al crear un jugador con email de tutor, se genera automáticamente una invitación por email.
+- Si configuras el Código FCF del club, la importación de equipos crea una cuenta ficticia de
+  entrenador para cada equipo sin enviar emails de activación. Las cuentas usan direcciones
+  reservadas `@example.invalid` y la contraseña definida en `FCF_TRAINER_DEFAULT_PASSWORD`.
 
 ## Datos de prueba (seed)
 

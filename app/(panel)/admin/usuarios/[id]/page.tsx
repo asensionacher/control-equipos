@@ -11,6 +11,7 @@ import { EditorDatosUsuario } from "./editor-datos";
 import { PanelPadre } from "./panel-padre";
 import { PanelJugador } from "./panel-jugador";
 import { PanelEntrenador } from "./panel-entrenador";
+import { CambioPasswordAdmin } from "./cambio-password-admin";
 import { formatearFechaInput } from "@/lib/utils";
 
 interface PageProps {
@@ -214,6 +215,8 @@ export default async function FichaUsuarioPage({ params, searchParams }: PagePro
           emailVerificado: usuario.emailVerificado,
         }}
       />
+
+      <CambioPasswordAdmin usuarioId={usuario.id} />
 
       <PanelPadre
         usuarioId={usuario.id}
