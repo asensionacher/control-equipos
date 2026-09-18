@@ -12,6 +12,11 @@ interface EnviarEmailParams {
 }
 
 export async function enviarEmail({ to, subject, html }: EnviarEmailParams): Promise<{ ok: boolean; error?: string }> {
+  if (to.toLowerCase().endsWith("@example.invalid")) {
+    console.warn("[email] Destino @example.invalid bloqueado (prueba). Email no enviado:", { to, subject });
+    return { ok: false, error: "Destino de prueba bloqueado" };
+  }
+
   if (!resend) {
     console.warn("[email] RESEND_API_KEY no configurada. Email no enviado:", { to, subject });
     return { ok: false, error: "Servicio de email no configurado" };
