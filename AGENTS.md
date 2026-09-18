@@ -35,6 +35,40 @@ Importar `lib/auth.ts` desde el middleware revienta el build en Edge. La verific
 - La firma del jugador/tutor resuelve el consentimiento directamente. No existe validación administrativa; el admin solo puede revocarla, lo que elimina el PDF privado y devuelve la asignación a `PENDIENTE`.
 - Los avisos operativos se guardan en `NotificacionPendiente` y se agrupan por email tras una ventana sin novedades. En producción los procesa `scripts/email-digest-worker.js`; activaciones y restablecimientos de contraseña deben seguir usando `enviarEmail` directamente.
 
+### Eliminación RGPD de personas (CRÍTICO)
+
+Eliminamos datos personales **anonimizando**, no destruyendo, para no romper la trazabilidad contable/legal. Hay dos acciones:
+
+- `eliminarUsuarioRGPD(usuarioId)` en `app/(panel)/admin/usuarios/[id]/actions.ts` — anonimiza la cuenta de Usuario y, si tiene Jugador/Entrenador vinculado, anonimiza también esas fichas. Valida que no sea el último admin ni tutor único de un menor de edad. Botón "Eliminar usuario (RGPD)" en la ficha de usuario.
+- `eliminarJugadorRGPD(jugadorId)` en `app/(panel)/admin/jugadores/actions.ts` — para Jugadores sin cuenta de Usuario (caso típico: menores cuyo padre tiene el acceso). Rechaza si el Jugador tiene Usuario vinculado (hay que eliminarlo desde la ficha del Usuario). Botón "Eliminar (RGPD)" en la ficha de jugador.
+
+**Qué se anonimiza / elimina:**
+
+- `Usuario`: nombre, apellidos, email, teléfono, DNI, fechaNacimiento, fotoUrl → vaciados; `passwordHash = null`; `emailVerificado = false`. La fila se elimina al final.
+- `Jugador` (vinculado o no): mismos campos + `fotoUrl = null`, `activo = false`. La fila **se conserva** (FKs de recibos, consentimientos, solicitudes).
+- `Entrenador` (vinculado): anonimizado; `EntrenadorEquipo` del Entrenador se eliminan.
+- `Tutoria` del Usuario eliminado: eliminadas.
+- `PasswordResetToken`: cascade.
+- FKs autor (`Recibo.creadoPorId`, `SolicitudDocumento.creadoPorId`, `Consentimiento.creadoPorId`, `Entrenador.creadoPorId`, `PendingRegistration.creadoPorId`, `Invitacion.creadaPorId/usuarioAceptaId`): pasan a null.
+- Foto del Jugador en S3/Azure: se borra **fuera de la transacción** (best-effort, log si falla).
+- Si algún Entrenador.jugadorId apunta al Jugador anonimizado, se desvincula.
+
+**Qué se conserva (NO se elimina):**
+
+- `Recibo` y `ReciboJugador`: obligación contable. Los PDFs ya emitidos siguen accesibles y muestran los nombres originales.
+- `ConsentimientoJugador` firmados: el PDF firmado se mantiene en S3/Azure (`pdfKey` intacto). Se añade `revocadoAt = now()` + `revocadoMotivo = "ELIMINACION_RGPD"`. La firma sigue visible para auditoría.
+- `SolicitudDocumento` y `SolicitudDocumentoJugador`: conservados tal cual.
+- `AuditoriaRGPD`: snapshot inmutable del sujeto eliminado (id, email, nombre original), quién lo eliminó, qué se anonimizó. Es prueba de cumplimiento ante una inspección.
+
+**Modelo `AuditoriaRGPD`:** `sujetoAfectadoId` es texto, no FK — sobrevive al borrado del Usuario/Jugador. `accion`: `"ELIMINACION_USUARIO_RGPD"` o `"ELIMINACION_JUGADOR_RGPD"`. `detalle` es JSON con conteos y entidades afectadas.
+
+**Restricciones importantes:**
+
+- No se puede eliminar al último admin del sistema.
+- No se puede eliminar a un Usuario tutor único de un Jugador menor de edad sin cuenta propia (hay que reasignar tutor antes).
+- No se puede eliminar un Jugador que tenga Usuario vinculado: hay que ir a la ficha del Usuario.
+- Las acciones se ejecutan en una `$transaction` Prisma. La única operación fuera de transacción es `deleteObject` de la foto en S3/Azure, que es best-effort.
+
 ### Sincronización Usuario ↔ Jugador (CRÍTICO)
 
 Los datos personales (nombre, apellidos, email, teléfono) viven duplicados en `Usuario` y `Jugador`. Hay que sincronizarlos explícitamente desde `lib/jugador-sync.ts`:

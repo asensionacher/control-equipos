@@ -12,6 +12,7 @@ import {
   validarFotoFormulario,
 } from "@/lib/foto-jugador";
 import { calcularEdad } from "@/lib/utils";
+import { deleteObject } from "@/lib/s3";
 
 const APP_URL = process.env.AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 
@@ -282,6 +283,126 @@ export async function eliminarJugador(id: string) {
   await requireAdmin();
   await prisma.jugador.update({ where: { id }, data: { activo: false } });
   revalidatePath("/admin/jugadores");
+  redirect("/admin/jugadores");
+}
+
+/**
+ * Eliminación RGPD de un Jugador.
+ *
+ * Caso de uso: Jugadores SIN cuenta propia (típicamente menores cuyo tutor tiene
+ * la cuenta de Usuario). Anonimiza la ficha del Jugador conservando la fila
+ * para mantener las FKs de ReciboJugador, ConsentimientoJugador, etc.
+ *
+ * Reglas:
+ *  - Si el Jugador tiene Usuario vinculado, rechazar y pedir usar
+ *    `eliminarUsuarioRGPD` desde la ficha del Usuario.
+ *  - Si el Jugador es menor de edad y tiene tutores, NO bloqueamos: la eliminación
+ *    RGPD es un derecho del interesado (o sus padres). Las Tutorias del Jugador
+ *    permanecen — son la prueba de quién era su tutor.
+ *  - Consentimientos firmados: se marcan como revocados.
+ *  - Si el Jugador está vinculado como Entrenador.jugadorId, se desvincula.
+ *  - Si el Jugador es Entrenador (Entrenador.jugadorId), se desvincula.
+ */
+export async function eliminarJugadorRGPD(
+  jugadorId: string
+): Promise<{ error?: string }> {
+  const session = await requireAdmin();
+
+  const jugador = await prisma.jugador.findUnique({
+    where: { id: jugadorId },
+    include: {
+      usuario: { select: { id: true, email: true } },
+    },
+  });
+  if (!jugador) return { error: "Jugador no encontrado" };
+  if (jugador.usuarioId) {
+    return {
+      error:
+        "Este jugador tiene cuenta de Usuario vinculada. Elimínalo desde la ficha del Usuario para anonimizar todo en una sola operación.",
+    };
+  }
+
+  const fotoKey = jugador.fotoUrl;
+
+  const [
+    consentimientosFirmadosCount,
+    recibosCount,
+    solicitudesCount,
+  ] = await Promise.all([
+    prisma.consentimientoJugador.count({
+      where: { jugadorId, firmadoPorId: { not: null } },
+    }),
+    prisma.reciboJugador.count({ where: { jugadorId } }),
+    prisma.solicitudDocumentoJugador.count({ where: { jugadorId } }),
+  ]);
+
+  await prisma.$transaction(async (tx) => {
+    // Desvincular si algún Entrenador usaba este Jugador.
+    await tx.entrenador.updateMany({
+      where: { jugadorId },
+      data: { jugadorId: null },
+    });
+
+    // Eliminar asignaciones a equipos.
+    await tx.asignacionEquipo.deleteMany({ where: { jugadorId } });
+
+    // Revocar consentimientos firmados (no eliminamos el PDF, conservamos prueba).
+    await tx.consentimientoJugador.updateMany({
+      where: { jugadorId },
+      data: {
+        revocadoAt: new Date(),
+        revocadoMotivo: "ELIMINACION_RGPD",
+      },
+    });
+
+    // Anonimizar la ficha del Jugador.
+    await tx.jugador.update({
+      where: { id: jugadorId },
+      data: {
+        nombre: "[Eliminado RGPD]",
+        apellidos: "",
+        email: null,
+        telefono: null,
+        telefonoAlternativo: null,
+        dniNie: null,
+        direccion: null,
+        fotoUrl: null,
+        activo: false,
+      },
+    });
+
+    // Auditoría.
+    await tx.auditoriaRGPD.create({
+      data: {
+        sujetoTipo: "JUGADOR",
+        sujetoAfectadoId: jugadorId,
+        sujetoAfectadoEmail: jugador.email,
+        sujetoAfectadoNombre: `${jugador.nombre} ${jugador.apellidos}`.trim(),
+        ejecutadoPorId: session.user.id,
+        accion: "ELIMINACION_JUGADOR_RGPD",
+        detalle: {
+          edadAlEliminar: calcularEdad(jugador.fechaNacimiento),
+          consentimientosRevocados: consentimientosFirmadosCount,
+          recibosPreservados: recibosCount,
+          solicitudesPreservadas: solicitudesCount,
+        },
+      },
+    });
+  });
+
+  if (fotoKey) {
+    try {
+      await deleteObject(fotoKey);
+    } catch (err) {
+      console.warn(
+        `[rgpd] No se pudo borrar la foto en S3 (${fotoKey}). La anonimización de BD se completó correctamente.`,
+        err
+      );
+    }
+  }
+
+  revalidatePath("/admin/jugadores");
+  revalidatePath(`/admin/jugadores/${jugadorId}`);
   redirect("/admin/jugadores");
 }
 

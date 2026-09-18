@@ -45,6 +45,7 @@ model Usuario {
   consentimientosCreados       Consentimiento[]        @relation("ConsentimientoCreador")
   consentimientosFirmados      ConsentimientoJugador[] @relation("ConsentimientoFirmante")
   entrenadoresCreados          Entrenador[]            @relation("EntrenadorCreador")
+  auditoriasRGPD               AuditoriaRGPD[]         @relation("AuditoriaRGPD Ejecutor")
 }
 
 model NotificacionPendiente {
@@ -140,8 +141,8 @@ model Invitacion {
   jugadorId String
 
   // Admin que creó la invitación
-  creadaPor   Usuario @relation("AdminCreadorInvitacion", fields: [creadaPorId], references: [id], onDelete: Cascade)
-  creadaPorId String
+  creadaPor   Usuario? @relation("AdminCreadorInvitacion", fields: [creadaPorId], references: [id], onDelete: SetNull)
+  creadaPorId String?
 
   // Usuario que aceptó la invitación (si ya existía)
   usuarioAcepta   Usuario? @relation("UsuarioInvitado", fields: [usuarioAceptaId], references: [id], onDelete: SetNull)
@@ -593,10 +594,43 @@ model ConsentimientoJugador {
   firmadoPorEmail   String?
   firmadoPorEsTutor Boolean?
 
+  // Revocación del consentimiento (RGPD o manual).
+  // Si está poblado, el consentimiento firmado se considera revocado en esta fecha,
+  // aunque conservamos el PDF firmado en S3 como prueba legal del consentimiento original.
+  revocadoAt    DateTime?
+  revocadoMotivo String? // "ELIMINACION_RGPD" | "REVOCACION_MANUAL" | ...
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@unique([consentimientoId, jugadorId])
   @@index([jugadorId])
   @@index([estado])
+}
+
+// ============================================
+// AUDITORÍA RGPD
+// ============================================
+
+// Registro inmutable de operaciones RGPD (eliminaciones, anonimizaciones, revocaciones).
+// El campo `usuarioAfectadoId` se guarda como texto (no FK) para que el registro
+// sobreviva al borrado del Usuario y permita acreditar el cumplimiento ante una auditoría.
+model AuditoriaRGPD {
+  id String @id @default(cuid())
+
+  // Snapshot del sujeto afectado (no FK, sobrevive al borrado del Usuario/Jugador).
+  sujetoTipo         String // "USUARIO" | "JUGADOR" | "ENTRENADOR"
+  sujetoAfectadoId   String
+  sujetoAfectadoEmail String?
+  sujetoAfectadoNombre String?
+
+  ejecutadoPorId String?
+  ejecutadoPor   Usuario? @relation("AuditoriaRGPD Ejecutor", fields: [ejecutadoPorId], references: [id], onDelete: SetNull)
+
+  accion  String // "ELIMINACION_USUARIO_RGPD" | "ELIMINACION_JUGADOR_RGPD" | ...
+  detalle Json   // entidades afectadas (ids), nº consentimientos revocados, etc.
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([sujetoAfectadoId])
 }

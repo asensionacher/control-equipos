@@ -12,6 +12,7 @@ import { PanelPadre } from "./panel-padre";
 import { PanelJugador } from "./panel-jugador";
 import { PanelEntrenador } from "./panel-entrenador";
 import { CambioPasswordAdmin } from "./cambio-password-admin";
+import { EliminarUsuarioRGPDButton } from "./eliminar-rgpd-button";
 import { formatearFechaInput } from "@/lib/utils";
 
 interface PageProps {
@@ -258,6 +259,12 @@ export default async function FichaUsuarioPage({ params, searchParams }: PagePro
             : null
         }
         equiposDisponibles={equipos}
+      />
+
+      <EliminarUsuarioRGPDButton
+        usuarioId={usuario.id}
+        nombre={`${usuario.nombre} ${usuario.apellidos}`.trim()}
+        email={usuario.email}
       />
     </div>
   );

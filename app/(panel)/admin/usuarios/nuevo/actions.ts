@@ -269,7 +269,8 @@ if (data.crearPerfilJugador) {
  * Crea un PendingRegistration con token nuevo y envía el email de activación.
  * Reutilizable para creación inicial, reenvío, o cambio de email.
  *
- * Si ya existe un pending activo para ese email, lo marca como usado antes de crear el nuevo.
+ * Elimina cualquier pendiente previo del mismo email antes de crear el nuevo,
+ * ya que `PendingRegistration.email` es `@unique` global (no parcial por `usado`).
  */
 export async function crearPendingYEnviarEmail(params: {
   email: string;
@@ -281,11 +282,10 @@ export async function crearPendingYEnviarEmail(params: {
 }) {
   const { email, nombre, apellidos, telefono } = params;
 
-  // Limpiar pendientes anteriores del mismo email
-  await prisma.pendingRegistration.updateMany({
-    where: { email, usado: false },
-    data: { usado: true, fechaUso: new Date() },
-  });
+  // Limpiar pendientes anteriores del mismo email.
+  // El constraint es global sobre `email`, no sobre (email, usado: false),
+  // así que marcar como usado no libera el slot único.
+  await prisma.pendingRegistration.deleteMany({ where: { email } });
 
   const pending = await prisma.pendingRegistration.create({
     data: {

@@ -9,6 +9,8 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { enviarEmail } from "@/lib/email";
 import { cambioPasswordAdminSchema } from "@/lib/validaciones";
+import { calcularEdad } from "@/lib/utils";
+import { deleteObject } from "@/lib/s3";
 import { crearPendingYEnviarEmail } from "../nuevo/actions";
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? "Control de Equipos";
@@ -423,16 +425,266 @@ export async function quitarEquipoAEntrenador(
 export async function eliminarUsuario(
   usuarioId: string
 ): Promise<{ error?: string }> {
-  await requireAdmin();
-  // Verificar que no sea el admin activo
-  const session = await auth();
-  if (session!.user.id === usuarioId) {
+  return eliminarUsuarioRGPD(usuarioId);
+}
+
+/**
+ * Eliminación RGPD de un Usuario.
+ *
+ * La cuenta de acceso se anonimiza y se elimina. Los datos personales del Usuario
+ * (y de su Jugador/Entrenador vinculados) se vacían. Las fichas de Jugador/
+ * Entrenador se conservan como registros contenedores (necesarios para FKs de
+ * ReciboJugador, ConsentimientoJugador, SolicitudDocumentoJugador, etc.) pero
+ * totalmente anonimizadas.
+ *
+ * Preserva (no se eliminan):
+ *  - Recibos y ReciboJugador (obligación contable).
+ *  - Consentimientos firmados: el PDF original sigue accesible y se marca como
+ *    revocado (`revocadoAt` + `revocadoMotivo = "ELIMINACION_RGPD"`).
+ *  - Solicitudes de documentos y sus archivos.
+ *  - AuditoriaRGPD con snapshot del sujeto eliminado.
+ */
+export async function eliminarUsuarioRGPD(
+  usuarioId: string
+): Promise<{ error?: string }> {
+  const session = await requireAdmin();
+
+  if (session.user.id === usuarioId) {
     return { error: "No puedes eliminar tu propio usuario" };
   }
-  // Eliminar asignaciones que causen FK violation
-  await prisma.usuario.delete({ where: { id: usuarioId } }).catch(() => {
-    // Si falla por FK, desactivar.
+
+  const usuario = await prisma.usuario.findUnique({
+    where: { id: usuarioId },
+    include: {
+      jugadorComoUsuario: { select: { id: true, fotoUrl: true } },
+      entrenadorComoUsuario: { select: { id: true } },
+    },
   });
+
+  if (!usuario) return { error: "Usuario no encontrado" };
+
+  // Si era admin, asegurar que queda al menos otro admin en el sistema.
+  if (usuario.rol === "ADMIN") {
+    const otrosAdmins = await prisma.usuario.count({
+      where: { rol: "ADMIN", id: { not: usuarioId } },
+    });
+    if (otrosAdmins === 0) {
+      return {
+        error:
+          "No se puede eliminar al último administrador del sistema. Asigna primero otro administrador.",
+      };
+    }
+  }
+
+  // Si el Usuario era tutor único de algún Jugador menor de edad, bloquear.
+  // (El Jugador vinculado a su propia cuenta no cuenta aquí, porque su
+  // eliminación ya está implícita en la propia anonimización del Usuario.)
+  const tutorias = await prisma.tutoria.findMany({
+    where: { usuarioId },
+    include: {
+      jugador: {
+        include: {
+          tutorias: { select: { usuarioId: true } },
+        },
+      },
+    },
+  });
+  const jugadoresHuerfanos: string[] = [];
+  for (const t of tutorias) {
+    if (t.jugador.usuarioId === usuarioId) continue;
+    const otrosTutores = t.jugador.tutorias.filter((ot) => ot.usuarioId !== usuarioId);
+    if (otrosTutores.length === 0) {
+      const edad = calcularEdad(t.jugador.fechaNacimiento);
+      if (edad < 18) {
+        jugadoresHuerfanos.push(
+          `${t.jugador.nombre} ${t.jugador.apellidos} (${edad} años)`
+        );
+      }
+    }
+  }
+  if (jugadoresHuerfanos.length > 0) {
+    return {
+      error:
+        `No se puede eliminar: este usuario es tutor único de jugadores menores de edad sin cuenta propia. ` +
+        `Asigna antes otro tutor a: ${jugadoresHuerfanos.join(", ")}.`,
+    };
+  }
+
+  const emailOriginal = usuario.email;
+  const fotoKey = usuario.jugadorComoUsuario?.fotoUrl ?? null;
+
+  // Conteos para auditoría.
+  const [
+    recibosCreadosCount,
+    solicitudesCreadasCount,
+    consentimientosCreadosCount,
+    consentimientosFirmadosCount,
+    invitacionesCreadasCount,
+    invitacionesAceptadasCount,
+    entrenadoresCreadosCount,
+  ] = await Promise.all([
+    prisma.recibo.count({ where: { creadoPorId: usuarioId } }),
+    prisma.solicitudDocumento.count({ where: { creadoPorId: usuarioId } }),
+    prisma.consentimiento.count({ where: { creadoPorId: usuarioId } }),
+    prisma.consentimientoJugador.count({ where: { firmadoPorId: usuarioId } }),
+    prisma.invitacion.count({ where: { creadaPorId: usuarioId } }),
+    prisma.invitacion.count({ where: { usuarioAceptaId: usuarioId } }),
+    prisma.entrenador.count({ where: { creadoPorId: usuarioId } }),
+  ]);
+
+  // Transacción: todas las operaciones de BD de forma atómica.
+  await prisma.$transaction(async (tx) => {
+    // 1. Si tiene Jugador vinculado, anonimizarlo (conservando la fila como FK).
+    if (usuario.jugadorComoUsuario) {
+      const jugadorId = usuario.jugadorComoUsuario.id;
+      await tx.jugador.update({
+        where: { id: jugadorId },
+        data: {
+          nombre: "[Eliminado RGPD]",
+          apellidos: "",
+          email: null,
+          telefono: null,
+          telefonoAlternativo: null,
+          dniNie: null,
+          direccion: null,
+          fotoUrl: null,
+          activo: false,
+          usuarioId: null,
+        },
+      });
+      // Si algún Entrenador usaba este Jugador, desvincular.
+      await tx.entrenador.updateMany({
+        where: { jugadorId },
+        data: { jugadorId: null },
+      });
+    }
+
+    // 2. Si tiene Entrenador vinculado, anonimizar y eliminar asignaciones.
+    if (usuario.entrenadorComoUsuario) {
+      const entrenadorId = usuario.entrenadorComoUsuario.id;
+      await tx.entrenadorEquipo.deleteMany({ where: { entrenadorId } });
+      await tx.entrenador.update({
+        where: { id: entrenadorId },
+        data: {
+          nombre: "[Eliminado RGPD]",
+          apellidos: "",
+          email: null,
+          telefono: null,
+          telefonoAlternativo: null,
+          observaciones: null,
+          activo: false,
+          usuarioId: null,
+        },
+      });
+    }
+
+    // 3. Eliminar Tutorias y PasswordResetTokens (también cascade, pero explícito).
+    await tx.tutoria.deleteMany({ where: { usuarioId } });
+    await tx.passwordResetToken.deleteMany({ where: { usuarioId } });
+
+    // 4. Nulear todas las FKs autor.
+    await tx.recibo.updateMany({
+      where: { creadoPorId: usuarioId },
+      data: { creadoPorId: null },
+    });
+    await tx.solicitudDocumento.updateMany({
+      where: { creadoPorId: usuarioId },
+      data: { creadoPorId: null },
+    });
+    await tx.consentimiento.updateMany({
+      where: { creadoPorId: usuarioId },
+      data: { creadoPorId: null },
+    });
+    await tx.entrenador.updateMany({
+      where: { creadoPorId: usuarioId },
+      data: { creadoPorId: null },
+    });
+    await tx.pendingRegistration.updateMany({
+      where: { creadoPorId: usuarioId },
+      data: { creadoPorId: null },
+    });
+    await tx.invitacion.updateMany({
+      where: { creadaPorId: usuarioId },
+      data: { creadaPorId: null },
+    });
+    await tx.invitacion.updateMany({
+      where: { usuarioAceptaId: usuarioId },
+      data: { usuarioAceptaId: null },
+    });
+
+    // 5. Consentimientos firmados: anonimizar firmante y revocar si estaban firmados.
+    await tx.consentimientoJugador.updateMany({
+      where: { firmadoPorId: usuarioId },
+      data: {
+        firmadoPorId: null,
+        firmadoPorNombre: "[Eliminado RGPD]",
+        firmadoPorEmail: null,
+        revocadoAt: new Date(),
+        revocadoMotivo: "ELIMINACION_RGPD",
+      },
+    });
+
+    // 6. Anonimizar el propio Usuario antes de eliminarlo.
+    await tx.usuario.update({
+      where: { id: usuarioId },
+      data: {
+        nombre: "[Eliminado RGPD]",
+        apellidos: "",
+        email: null,
+        telefono: null,
+        telefonoAlternativo: null,
+        fechaNacimiento: null,
+        dniNie: null,
+        passwordHash: null,
+        emailVerificado: false,
+      },
+    });
+
+    // 7. Auditoría con snapshot del sujeto afectado.
+    await tx.auditoriaRGPD.create({
+      data: {
+        sujetoTipo: "USUARIO",
+        sujetoAfectadoId: usuarioId,
+        sujetoAfectadoEmail: emailOriginal,
+        sujetoAfectadoNombre: `${usuario.nombre} ${usuario.apellidos}`.trim(),
+        ejecutadoPorId: session.user.id,
+        accion: "ELIMINACION_USUARIO_RGPD",
+        detalle: {
+          jugadorAnonimizadoId: usuario.jugadorComoUsuario?.id ?? null,
+          entrenadorAnonimizadoId: usuario.entrenadorComoUsuario?.id ?? null,
+          tutoriasEliminadas: tutorias.length,
+          consentimientosRevocados: consentimientosFirmadosCount,
+          fksNuleadas: {
+            recibosCreados: recibosCreadosCount,
+            solicitudesCreadas: solicitudesCreadasCount,
+            consentimientosCreados: consentimientosCreadosCount,
+            invitacionesCreadas: invitacionesCreadasCount,
+            invitacionesAceptadas: invitacionesAceptadasCount,
+            entrenadoresCreados: entrenadoresCreadosCount,
+          },
+        },
+      },
+    });
+
+    // 8. Eliminar el Usuario anonimizado.
+    await tx.usuario.delete({ where: { id: usuarioId } });
+  });
+
+  // Fuera de la transacción: borrar la foto del Jugador en S3 (best-effort).
+  if (fotoKey) {
+    try {
+      await deleteObject(fotoKey);
+    } catch (err) {
+      console.warn(
+        `[rgpd] No se pudo borrar la foto en S3 (${fotoKey}). La anonimización de BD se completó correctamente.`,
+        err
+      );
+    }
+  }
+
   revalidatePath("/admin/usuarios");
+  revalidatePath("/admin/padres");
+  revalidatePath("/admin/jugadores");
+  revalidatePath("/admin/entrenadores");
   redirect("/admin/usuarios");
 }

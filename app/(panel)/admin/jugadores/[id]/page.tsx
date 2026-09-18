@@ -10,6 +10,7 @@ import { calcularEdad, formatearFecha, formatearNumeroRecibo, iniciales } from "
 import Link from "next/link";
 import { Pencil, Mail, Users, Trophy, ExternalLink, UserPlus, FileText } from "lucide-react";
 import { EliminarJugadorButton } from "./eliminar-button";
+import { EliminarJugadorRGPDButton } from "./eliminar-rgpd-button";
 import { AsignarEquipos } from "./asignar-equipos";
 import { CrearActivacionJugador } from "./crear-activacion-jugador";
 import { getDatosPersonales } from "@/lib/jugador-sync";
@@ -153,6 +154,7 @@ export default async function FichaJugadorPage({ params }: PageProps) {
             </Link>
           </Button>
           <EliminarJugadorButton id={jugador.id} nombre={`${jugador.nombre} ${jugador.apellidos}`} />
+          <EliminarJugadorRGPDButton id={jugador.id} nombre={`${jugador.nombre} ${jugador.apellidos}`} />
         </div>
       </div>
 
