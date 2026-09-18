@@ -22,7 +22,10 @@ export default async function PadresPage({ searchParams }: PageProps) {
   if (!session?.user || session.user.rol !== "ADMIN") redirect("/dashboard");
   const { texto } = await searchParams;
 
-  const where: any = { rol: "USUARIO" };
+  const where: any = {
+    rol: "USUARIO",
+    tutorias: { some: {} },
+  };
   if (texto?.trim()) {
     where.OR = [
       { nombre: { contains: texto.trim(), mode: "insensitive" } },

@@ -35,7 +35,9 @@ export default async function AdminDashboardPage() {
     prisma.jugador.count({
       where: { activo: true, asignaciones: { none: {} } },
     }),
-    prisma.usuario.count({ where: { rol: "USUARIO" } }),
+    prisma.usuario.count({
+      where: { rol: "USUARIO", tutorias: { some: {} } },
+    }),
     prisma.reciboJugador.count({
       where: { estado: { in: ["PENDIENTE", "RECHAZADO"] } },
     }),
@@ -52,7 +54,7 @@ export default async function AdminDashboardPage() {
       take: 5,
     }),
     prisma.usuario.findMany({
-      where: { rol: "USUARIO" },
+      where: { rol: "USUARIO", tutorias: { some: {} } },
       orderBy: { createdAt: "desc" },
       take: 5,
     }),
