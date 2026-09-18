@@ -131,8 +131,13 @@ export async function editarEquipo(id: string, formData: FormData) {
 
 export async function eliminarEquipo(id: string) {
   await requireAdmin();
-  await prisma.equipo.update({ where: { id }, data: { activo: false } });
+  await prisma.$transaction([
+    prisma.asignacionEquipo.deleteMany({ where: { equipoId: id } }),
+    prisma.equipo.delete({ where: { id } }),
+  ]);
   revalidatePath("/admin/equipos");
+  revalidatePath("/admin");
+  revalidatePath("/dashboard");
   redirect("/admin/equipos");
 }
 
