@@ -18,6 +18,7 @@ export async function guardarConfiguracionClub(formData: FormData): Promise<{ er
 
   const parsed = configuracionClubSchema.safeParse({
     nombre: formData.get("nombre"),
+    codigoFcf: formData.get("codigoFcf") || "",
     colorPrimario: formData.get("colorPrimario") || "#1d4ed8",
     nif: formData.get("nif") || "",
     direccion: formData.get("direccion") || "",
@@ -62,6 +63,7 @@ export async function guardarConfiguracionClub(formData: FormData): Promise<{ er
 
   const valores = {
     nombre: data.nombre,
+    codigoFcf: data.codigoFcf || null,
     colorPrimario: data.colorPrimario,
     nif: data.nif || null,
     direccion: data.direccion || null,

@@ -79,6 +79,9 @@ export default async function FichaEquipoPage({ params }: PageProps) {
             {equipo.categoria && (
               <p className="mt-1 text-sm text-muted-foreground">Categoría: {equipo.categoria}</p>
             )}
+            {equipo.codigoFcf && (
+              <p className="mt-1 text-sm text-muted-foreground">Código FCF: {equipo.codigoFcf}</p>
+            )}
             {equipo.descripcion && <p className="mt-2 text-sm">{equipo.descripcion}</p>}
             {equipo.urlLiga && (
               <a

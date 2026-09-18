@@ -3,7 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import { obtenerEquiposFcf } from "@/lib/fcf";
 import { prisma } from "@/lib/prisma";
+import { formatearFechaHora } from "@/lib/utils";
 import { equipoSchema, horariosEquipoSchema } from "@/lib/validaciones";
 
 async function requireAdmin() {
@@ -14,6 +16,7 @@ async function requireAdmin() {
 function parseForm(formData: FormData) {
   return {
     nombre: (formData.get("nombre") as string | null)?.trim() ?? "",
+    codigoFcf: (formData.get("codigoFcf") as string | null)?.trim() ?? "",
     categoria: (formData.get("categoria") as string | null)?.trim() ?? "",
     descripcion: (formData.get("descripcion") as string | null)?.trim() ?? "",
     urlLiga: (formData.get("urlLiga") as string | null)?.trim() ?? "",
@@ -52,12 +55,20 @@ export async function crearEquipo(formData: FormData) {
   });
   if (existe) return { error: "Ya existe un equipo con ese nombre en esa temporada" };
 
+  const existeCodigoFcf = parsed.data.codigoFcf
+    ? await prisma.equipo.findUnique({
+        where: { codigoFcf: parsed.data.codigoFcf },
+      })
+    : null;
+  if (existeCodigoFcf) return { error: "Ya existe un equipo con ese Código FCF" };
+
   const temporada = await prisma.temporada.findUnique({ where: { id: parsed.data.temporadaId } });
   if (!temporada) return { error: "Temporada no encontrada" };
 
   await prisma.equipo.create({
     data: {
       nombre: parsed.data.nombre,
+      codigoFcf: parsed.data.codigoFcf || null,
       categoria: parsed.data.categoria || null,
       descripcion: parsed.data.descripcion || null,
       urlLiga: parsed.data.urlLiga || null,
@@ -85,11 +96,19 @@ export async function editarEquipo(id: string, formData: FormData) {
   });
   if (existe) return { error: "Ya existe otro equipo con ese nombre en esa temporada" };
 
+  const existeCodigoFcf = parsed.data.codigoFcf
+    ? await prisma.equipo.findFirst({
+        where: { codigoFcf: parsed.data.codigoFcf, NOT: { id } },
+      })
+    : null;
+  if (existeCodigoFcf) return { error: "Ya existe otro equipo con ese Código FCF" };
+
   await prisma.$transaction(async (tx) => {
     await tx.equipo.update({
       where: { id },
       data: {
         nombre: parsed.data.nombre,
+        codigoFcf: parsed.data.codigoFcf || null,
         categoria: parsed.data.categoria || null,
         descripcion: parsed.data.descripcion || null,
         urlLiga: parsed.data.urlLiga || null,
@@ -115,4 +134,114 @@ export async function eliminarEquipo(id: string) {
   await prisma.equipo.update({ where: { id }, data: { activo: false } });
   revalidatePath("/admin/equipos");
   redirect("/admin/equipos");
+}
+
+export async function importarEquiposFcf(): Promise<{
+  error?: string;
+  success?: string;
+  warning?: string;
+}> {
+  await requireAdmin();
+  const fechaImportacion = formatearFechaHora(new Date(), { timeZone: "Europe/Madrid" });
+
+  const [club, temporada] = await Promise.all([
+    prisma.configuracionClub.findUnique({
+      where: { id: 1 },
+      select: { codigoFcf: true },
+    }),
+    prisma.temporada.findFirst({
+      where: { activa: true },
+      orderBy: { fechaInicio: "desc" },
+      select: { id: true, nombre: true },
+    }),
+  ]);
+
+  if (!club?.codigoFcf) {
+    return { error: "Configura primero el Código FCF del club" };
+  }
+  if (!temporada) {
+    return { error: "No hay ninguna temporada activa para importar los equipos" };
+  }
+
+  let resultadoFcf;
+  try {
+    resultadoFcf = await obtenerEquiposFcf(club.codigoFcf);
+  } catch (error) {
+    console.error("[fcf] No se pudieron consultar los equipos:", error);
+    return {
+      error: error instanceof Error ? error.message : "No se pudieron consultar los equipos de la FCF",
+    };
+  }
+
+  if (resultadoFcf.equipos.length === 0) {
+    return { error: "La FCF no devolvió ningún equipo para este club" };
+  }
+
+  const codigosFcf = resultadoFcf.equipos.map(({ codigoFcf }) => codigoFcf);
+  const nombres = resultadoFcf.equipos.map(({ nombre }) => nombre);
+  const existentes = await prisma.equipo.findMany({
+    where: {
+      OR: [
+        { codigoFcf: { in: codigosFcf } },
+        { temporadaId: temporada.id, nombre: { in: nombres } },
+      ],
+    },
+    select: { codigoFcf: true, nombre: true, temporadaId: true },
+  });
+
+  const codigosExistentes = new Set(
+    existentes.flatMap(({ codigoFcf }) => (codigoFcf ? [codigoFcf] : []))
+  );
+  const nombresExistentes = new Set(
+    existentes
+      .filter(({ temporadaId }) => temporadaId === temporada.id)
+      .map(({ nombre }) => nombre)
+  );
+  const nuevos = resultadoFcf.equipos.filter(
+    ({ codigoFcf, nombre }) =>
+      !codigosExistentes.has(codigoFcf) && !nombresExistentes.has(nombre)
+  );
+
+  try {
+    if (nuevos.length > 0) {
+      await prisma.$transaction(
+        nuevos.map((equipo) =>
+          prisma.equipo.create({
+            data: {
+              nombre: equipo.nombre,
+              codigoFcf: equipo.codigoFcf,
+              categoria: equipo.categoria,
+              descripcion: `Creado automáticamente desde la FCF el ${fechaImportacion}.`,
+              urlLiga: equipo.urlLiga,
+              temporadaId: temporada.id,
+              horariosEntrenamiento: {
+                create: equipo.horarios,
+              },
+            },
+          })
+        )
+      );
+    }
+  } catch (error) {
+    console.error("[fcf] No se pudieron guardar los equipos importados:", error);
+    return { error: "No se pudieron guardar los equipos importados" };
+  }
+
+  revalidatePath("/admin/equipos");
+  revalidatePath("/admin");
+  revalidatePath("/dashboard");
+
+  const omitidos = resultadoFcf.equipos.length - nuevos.length;
+  const resumenOmitidos = omitidos > 0 ? `; ${omitidos} ya existían` : "";
+  const warning =
+    resultadoFcf.advertencias.length > 0
+      ? `${resultadoFcf.advertencias.length} equipos se importaron sin horario completo. ${resultadoFcf.advertencias
+          .slice(0, 3)
+          .join(". ")}${resultadoFcf.advertencias.length > 3 ? "…" : ""}`
+      : undefined;
+
+  return {
+    success: `Importación completada en ${temporada.nombre}: ${nuevos.length} equipos creados${resumenOmitidos}.`,
+    warning,
+  };
 }

@@ -20,7 +20,10 @@ export function formatearFechaInput(date: Date | string | null | undefined): str
   return d.toISOString().split("T")[0];
 }
 
-export function formatearFechaHora(date: Date | string | null | undefined): string {
+export function formatearFechaHora(
+  date: Date | string | null | undefined,
+  opciones?: Intl.DateTimeFormatOptions
+): string {
   if (!date) return "—";
   const d = typeof date === "string" ? new Date(date) : date;
   return d.toLocaleString("es-ES", {
@@ -29,6 +32,7 @@ export function formatearFechaHora(date: Date | string | null | undefined): stri
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
+    ...opciones,
   });
 }
 

@@ -34,6 +34,7 @@ export default async function EditarEquipoPage({ params }: PageProps) {
         equipo={{
           id: equipo.id,
           nombre: equipo.nombre,
+          codigoFcf: equipo.codigoFcf,
           categoria: equipo.categoria,
           descripcion: equipo.descripcion,
           urlLiga: equipo.urlLiga,

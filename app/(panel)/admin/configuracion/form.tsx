@@ -60,6 +60,18 @@ export function ConfiguracionClubForm({ club }: Props) {
               <Label htmlFor="nombre">Nombre del club *</Label>
               <Input id="nombre" name="nombre" required defaultValue={club.nombre} />
             </div>
+            <div className="space-y-2">
+              <Label htmlFor="codigoFcf">Código FCF</Label>
+              <Input
+                id="codigoFcf"
+                name="codigoFcf"
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                title="Introduce únicamente números"
+                defaultValue={club.codigoFcf ?? ""}
+              />
+            </div>
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor="logo">Escudo o logotipo</Label>
               {club.logoKey && (

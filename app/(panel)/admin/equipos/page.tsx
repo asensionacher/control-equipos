@@ -7,20 +7,30 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import Link from "next/link";
 import { Plus, Pencil, Users, ExternalLink } from "lucide-react";
+import { getConfiguracionClub } from "@/lib/club-utils";
 import { EliminarEquipoButton } from "./eliminar-button";
+import { ImportarEquiposFcfButton } from "./importar-fcf-button";
 
 export default async function EquiposPage() {
   const session = await auth();
   if (!session?.user || session.user.rol !== "ADMIN") redirect("/dashboard");
 
-  const equipos = await prisma.equipo.findMany({
-    where: { activo: true },
-    include: {
-      temporada: true,
-      _count: { select: { asignaciones: true } },
-    },
-    orderBy: [{ temporada: { fechaInicio: "desc" } }, { nombre: "asc" }],
-  });
+  const [equipos, club, temporadaActiva] = await Promise.all([
+    prisma.equipo.findMany({
+      where: { activo: true },
+      include: {
+        temporada: true,
+        _count: { select: { asignaciones: true } },
+      },
+      orderBy: [{ temporada: { fechaInicio: "desc" } }, { nombre: "asc" }],
+    }),
+    getConfiguracionClub(),
+    prisma.temporada.findFirst({
+      where: { activa: true },
+      orderBy: { fechaInicio: "desc" },
+      select: { nombre: true },
+    }),
+  ]);
 
   const agrupadosPorTemporada = equipos.reduce<Record<string, typeof equipos>>((acc, equipo) => {
     const key = equipo.temporada.nombre;
@@ -36,12 +46,19 @@ export default async function EquiposPage() {
           <h1 className="text-2xl font-bold tracking-tight sm:text-3xl">Equipos</h1>
           <p className="text-sm text-muted-foreground">Gestiona los equipos por temporada</p>
         </div>
-        <Button asChild>
-          <Link href="/admin/equipos/nuevo">
-            <Plus className="h-4 w-4" />
-            Nuevo equipo
-          </Link>
-        </Button>
+        <div className="flex flex-col gap-2 sm:items-end">
+          <div className="flex flex-wrap gap-2">
+            {club.codigoFcf && (
+              <ImportarEquiposFcfButton temporadaNombre={temporadaActiva?.nombre ?? null} />
+            )}
+            <Button asChild>
+              <Link href="/admin/equipos/nuevo">
+                <Plus className="h-4 w-4" />
+                Nuevo equipo
+              </Link>
+            </Button>
+          </div>
+        </div>
       </div>
 
       {Object.keys(agrupadosPorTemporada).length === 0 ? (
@@ -62,6 +79,7 @@ export default async function EquiposPage() {
                 <TableHeader>
                   <TableRow>
                     <TableHead>Equipo</TableHead>
+                    <TableHead className="hidden md:table-cell">Código FCF</TableHead>
                     <TableHead className="hidden sm:table-cell">Categoría</TableHead>
                     <TableHead>Jugadores</TableHead>
                     <TableHead className="text-right">Acciones</TableHead>
@@ -87,6 +105,9 @@ export default async function EquiposPage() {
                             </a>
                           )}
                         </div>
+                      </TableCell>
+                      <TableCell className="hidden md:table-cell">
+                        {e.codigoFcf || <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell className="hidden sm:table-cell">
                         {e.categoria || <span className="text-muted-foreground">—</span>}

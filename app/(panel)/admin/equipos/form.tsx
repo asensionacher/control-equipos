@@ -20,6 +20,7 @@ interface Props {
   equipo?: {
     id: string;
     nombre: string;
+    codigoFcf: string | null;
     categoria: string | null;
     descripcion: string | null;
     urlLiga: string | null;
@@ -149,6 +150,18 @@ export function EquipoForm({ equipo, temporadas }: Props) {
           <div className="space-y-2">
             <Label htmlFor="nombre">Nombre del equipo *</Label>
             <Input id="nombre" name="nombre" required defaultValue={equipo?.nombre ?? ""} placeholder="Alevín A" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="codigoFcf">Código FCF</Label>
+            <Input
+              id="codigoFcf"
+              name="codigoFcf"
+              type="text"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              title="Introduce únicamente números"
+              defaultValue={equipo?.codigoFcf ?? ""}
+            />
           </div>
           <div className="space-y-2">
             <Label htmlFor="categoria">Categoría</Label>

@@ -60,6 +60,11 @@ export const temporadaSchema = z
 
 export const equipoSchema = z.object({
   nombre: z.string().min(2, "El nombre del equipo es obligatorio"),
+  codigoFcf: z
+    .string()
+    .regex(/^\d*$/, "El Código FCF solo puede contener números")
+    .optional()
+    .or(z.literal("")),
   categoria: z.string().optional().or(z.literal("")),
   descripcion: z.string().optional().or(z.literal("")),
   urlLiga: z.string().url("URL inválida").optional().or(z.literal("")),
@@ -221,6 +226,11 @@ export const reciboPagoSchema = z.object({
 
 export const configuracionClubSchema = z.object({
   nombre: z.string().min(2, "El nombre del club es obligatorio"),
+  codigoFcf: z
+    .string()
+    .regex(/^\d*$/, "El Código FCF solo puede contener números")
+    .optional()
+    .or(z.literal("")),
   colorPrimario: z.string().regex(/^#[0-9a-fA-F]{6}$/, "Color principal inválido"),
   nif: z.string().optional().or(z.literal("")),
   direccion: z.string().optional().or(z.literal("")),

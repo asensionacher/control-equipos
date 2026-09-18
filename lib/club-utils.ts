@@ -10,11 +10,9 @@ import { prisma } from "./prisma";
  * propia independientemente de los recibos que se emitan.
  */
 export async function getConfiguracionClub() {
-  let club = await prisma.configuracionClub.findUnique({ where: { id: 1 } });
-  if (!club) {
-    club = await prisma.configuracionClub.create({
-      data: { id: 1, nombre: "Club Deportivo", prefijoRecibo: "R" },
-    });
-  }
-  return club;
+  return prisma.configuracionClub.upsert({
+    where: { id: 1 },
+    update: {},
+    create: { id: 1, nombre: "Club Deportivo", prefijoRecibo: "R" },
+  });
 }

@@ -221,6 +221,7 @@ model Temporada {
 model Equipo {
   id          String  @id @default(cuid())
   nombre      String
+  codigoFcf   String? @unique
   categoria   String? // "Benjamín", "Alevín", "Senior", etc.
   descripcion String?
   urlLiga     String? // URL a la página oficial de la federación/liga
@@ -353,6 +354,7 @@ model AsignacionEquipo {
 model ConfiguracionClub {
   id            Int      @id @default(1)
   nombre        String // Razón social del club
+  codigoFcf     String? // Código identificativo de la Federació Catalana de Futbol
   logoKey       String?
   colorPrimario String   @default("#1d4ed8")
   nif           String? // NIF / CIF del club

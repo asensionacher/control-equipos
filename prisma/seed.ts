@@ -26,6 +26,7 @@ async function main() {
     create: {
       id: 1,
       nombre: "Club Deportivo de Prueba",
+      codigoFcf: "1218",
       nif: "G12345678",
       direccion: "Calle del Deporte, 1",
       codigoPostal: "28001",
@@ -63,6 +64,7 @@ async function main() {
   const alevinA = await prisma.equipo.create({
     data: {
       nombre: "Alevín A",
+      codigoFcf: "100001",
       categoria: "Alevín",
       descripcion: "Equipo alevín masculino",
       urlLiga: "https://competicion.federacion.es/alevin-a",
@@ -73,6 +75,7 @@ async function main() {
   const benjaminB = await prisma.equipo.create({
     data: {
       nombre: "Benjamín B",
+      codigoFcf: "100002",
       categoria: "Benjamín",
       descripcion: "Equipo benjamín mixto",
       temporadaId: tempActual.id,
@@ -82,6 +85,7 @@ async function main() {
   const cadete = await prisma.equipo.create({
     data: {
       nombre: "Cadete",
+      codigoFcf: "100003",
       categoria: "Cadete",
       temporadaId: tempActual.id,
     },
@@ -91,6 +95,7 @@ async function main() {
   await prisma.equipo.create({
     data: {
       nombre: "Prebenjamines",
+      codigoFcf: "100004",
       categoria: "Prebenjamín",
       temporadaId: tempAnterior.id,
     },

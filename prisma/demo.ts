@@ -243,7 +243,8 @@ async function main() {
   });
 
   const equiposCreados = new Map<string, string>();
-  for (const datos of equipos) {
+  for (const [indice, datos] of equipos.entries()) {
+    const codigoFcf = String(900001 + indice);
     const equipo = await prisma.equipo.upsert({
       where: {
         nombre_temporadaId: {
@@ -252,12 +253,14 @@ async function main() {
         },
       },
       update: {
+        codigoFcf,
         categoria: datos.categoria,
         descripcion: datos.descripcion,
         activo: true,
       },
       create: {
         nombre: datos.nombre,
+        codigoFcf,
         categoria: datos.categoria,
         descripcion: datos.descripcion,
         temporadaId: temporada.id,
