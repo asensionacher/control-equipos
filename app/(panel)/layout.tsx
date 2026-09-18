@@ -17,7 +17,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   const [usuarioExiste, club] = await Promise.all([
     prisma.usuario.findUnique({
       where: { id: session.user.id },
-      select: { id: true, rol: true },
+      select: { id: true, rol: true, totpEnabled: true },
     }),
     getConfiguracionClub(),
   ]);
@@ -27,6 +27,13 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   }
 
   const esAdmin = session.user.rol === "ADMIN";
+
+  // Los administradores deben tener verificación en dos pasos activada para
+  // acceder a cualquier ruta protegida. Forzamos paso por /perfil para que la
+  // activen antes de poder seguir navegando.
+  if (esAdmin && !usuarioExiste.totpEnabled) {
+    redirect("/perfil?forceTotp=1");
+  }
 
   return (
     <div className="flex min-h-screen flex-col bg-muted/30">

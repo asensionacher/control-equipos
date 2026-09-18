@@ -7,19 +7,29 @@ import { formatearFecha, iniciales } from "@/lib/utils";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { PerfilForm } from "./perfil-form";
 import { CambioPasswordForm } from "./cambio-password-form";
+import { TotpPanel } from "./totp";
+import { getConfiguracionClub } from "@/lib/club-utils";
+
+interface PageProps {
+  searchParams: Promise<{ forceTotp?: string }>;
+}
 
 export const dynamic = "force-dynamic";
 
-export default async function PerfilPage() {
+export default async function PerfilPage({ searchParams }: PageProps) {
   const session = await auth();
   if (!session?.user) redirect("/login");
+  const { forceTotp } = await searchParams;
 
-  const usuario = await prisma.usuario.findUnique({
-    where: { id: session.user.id },
-    include: {
-      _count: { select: { tutorias: true } },
-    },
-  });
+  const [usuario, club] = await Promise.all([
+    prisma.usuario.findUnique({
+      where: { id: session.user.id },
+      include: {
+        _count: { select: { tutorias: true } },
+      },
+    }),
+    getConfiguracionClub(),
+  ]);
 
   if (!usuario) redirect("/login");
 
@@ -81,6 +91,12 @@ export default async function PerfilPage() {
           <CambioPasswordForm />
         </CardContent>
       </Card>
+
+      <TotpPanel
+        inicial={{ totpEnabled: usuario.totpEnabled }}
+        nombreClub={club.nombre}
+        forzado={forceTotp === "1" && usuario.rol === "ADMIN"}
+      />
     </div>
   );
 }

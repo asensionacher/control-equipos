@@ -8,10 +8,13 @@ export default auth((req) => {
   const { nextUrl } = req;
   const isLoggedIn = !!req.auth;
   const isAdmin = req.auth?.user?.rol === "ADMIN";
-
   const esRutaAdmin = nextUrl.pathname.startsWith("/admin");
   const esRutaProtegida = nextUrl.pathname.startsWith("/dashboard") || esRutaAdmin;
-  const esRutaAuth = nextUrl.pathname.startsWith("/login") || nextUrl.pathname.startsWith("/registro");
+  const esRutaAuth =
+    nextUrl.pathname === "/login" ||
+    nextUrl.pathname.startsWith("/registro") ||
+    nextUrl.pathname.startsWith("/recuperar-password") ||
+    nextUrl.pathname.startsWith("/activar-cuenta");
 
   if (esRutaProtegida && !isLoggedIn) {
     const url = new URL("/login", nextUrl.origin);
@@ -24,7 +27,9 @@ export default auth((req) => {
   }
 
   if (esRutaAuth && isLoggedIn) {
-    return NextResponse.redirect(new URL(isAdmin ? "/admin" : "/dashboard", nextUrl.origin));
+    return NextResponse.redirect(
+      new URL(isAdmin ? "/admin" : "/dashboard", nextUrl.origin)
+    );
   }
 
   return NextResponse.next();

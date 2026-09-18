@@ -26,7 +26,10 @@ export function LoginForm({
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(params.error ? "Credenciales inválidas" : null);
+  const [code, setCode] = useState("");
+  const [error, setError] = useState<string | null>(
+    params.error ? "Credenciales inválidas" : null
+  );
   const [success, setSuccess] = useState<string | null>(
     params.reset
       ? "Contraseña actualizada. Inicia sesión con tu nueva contraseña."
@@ -38,6 +41,7 @@ export function LoginForm({
             ? "Tu sesión ha caducado. Inicia sesión de nuevo."
             : null
   );
+  const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -48,10 +52,18 @@ export function LoginForm({
       const result = await signIn("credentials", {
         email,
         password,
+        totp: requiresTwoFactor ? code : undefined,
         redirect: false,
       });
+      if (result?.error === "REQUIRES_2FA") {
+        setRequiresTwoFactor(true);
+        setError(
+          "Esta cuenta requiere verificación en dos pasos. Introduce el código de tu app autenticadora."
+        );
+        return;
+      }
       if (result?.error) {
-        setError("Email o contraseña incorrectos");
+        setError("Email, contraseña o código incorrectos");
         return;
       }
       router.push(params.callbackUrl ?? "/");
@@ -97,14 +109,17 @@ export function LoginForm({
               onChange={(e) => setEmail(e.target.value)}
               required
               autoComplete="email"
+              disabled={requiresTwoFactor}
             />
           </div>
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label htmlFor="password">Contraseña</Label>
-              <Link href="/recuperar-password" className="text-xs text-blue-600 hover:underline">
-                ¿Olvidaste tu contraseña?
-              </Link>
+              {!requiresTwoFactor && (
+                <Link href="/recuperar-password" className="text-xs text-blue-600 hover:underline">
+                  ¿Olvidaste tu contraseña?
+                </Link>
+              )}
             </div>
             <Input
               id="password"
@@ -113,21 +128,59 @@ export function LoginForm({
               onChange={(e) => setPassword(e.target.value)}
               required
               autoComplete="current-password"
+              disabled={requiresTwoFactor}
             />
           </div>
+          {requiresTwoFactor && (
+            <div className="space-y-2">
+              <Label htmlFor="code">Código de verificación (2FA)</Label>
+              <Input
+                id="code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                pattern="\d{6}"
+                placeholder="000000"
+                value={code}
+                onChange={(e) =>
+                  setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                }
+                className="text-center text-2xl tracking-[0.5em] font-mono"
+                autoFocus
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Abre tu app autenticadora (Google Authenticator, Authy, 1Password, etc.)
+                e introduce los 6 dígitos que muestra para esta cuenta.
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  setRequiresTwoFactor(false);
+                  setCode("");
+                  setError(null);
+                }}
+                className="text-xs text-blue-600 hover:underline"
+              >
+                ← Volver
+              </button>
+            </div>
+          )}
         </CardContent>
         <CardFooter className="flex flex-col gap-3">
           <Button
             type="submit"
             className="w-full"
             style={{ backgroundColor: colorPrimario }}
-            disabled={isPending}
+            disabled={isPending || (requiresTwoFactor && code.length !== 6)}
           >
             {isPending ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Entrando...
+                {requiresTwoFactor ? "Verificando…" : "Entrando…"}
               </>
+            ) : requiresTwoFactor ? (
+              "Verificar y continuar"
             ) : (
               "Entrar"
             )}

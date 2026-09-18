@@ -35,6 +35,15 @@ Importar `lib/auth.ts` desde el middleware revienta el build en Edge. La verific
 - La firma del jugador/tutor resuelve el consentimiento directamente. No existe validación administrativa; el admin solo puede revocarla, lo que elimina el PDF privado y devuelve la asignación a `PENDIENTE`.
 - Los avisos operativos se guardan en `NotificacionPendiente` y se agrupan por email tras una ventana sin novedades. En producción los procesa `scripts/email-digest-worker.js`; activaciones y restablecimientos de contraseña deben seguir usando `enviarEmail` directamente.
 
+### Verificación en dos pasos (TOTP)
+
+- Secretaría el `Usuario.totpSecret` se almacena **cifrada en BD** con AES-256-GCM (`lib/totp.ts`). La clave se deriva de `AUTH_SECRET` con SHA-256. **Rotar `AUTH_SECRET` bloquea a todos los usuarios con 2FA activado**: hay que avisarles para que reconfiguren. El reset se hace desde la ficha de usuario en `/admin/usuarios/[id]` con la acción `resetearTotpUsuario`.
+- **Obligatorio para ADMIN, opcional para el resto.** El layout `app/(panel)/layout.tsx` redirige a `/perfil?forceTotp=1` cuando un ADMIN entra sin `totpEnabled=true` en BD. Tras activar, queda libre.
+- **Activación**: el usuario hace click en "Activar" en `/perfil` → servidor genera secret, lo guarda cifrado y devuelve el QR + URI. El usuario escanea con su app autenticadora e introduce el primer código → `confirmarTotp` lo verifica y marca `totpEnabled=true`.
+- **Login**: el form `/login` pide solo email+password; si la cuenta tiene `totpEnabled`, `authorize` lanza `Error("REQUIRES_2FA")` y el form muestra el campo de código en un segundo paso sin recargar.
+- **Disable propio** (`desactivarTotpPropio` en `app/(panel)/perfil/actions.ts`): pide la contraseña actual para evitar desactivación por sesión robada.
+- **Reset admin** (`resetearTotpUsuario` en `app/(panel)/admin/usuarios/[id]/actions.ts`): un admin puede resetear el 2FA de otro usuario si perdió el dispositivo. Si quitas TOTP a un ADMIN desde aquí, el siguiente login lo redirigirá automáticamente a `/perfil` para reactivar.
+
 ### Eliminación RGPD de personas (CRÍTICO)
 
 Eliminamos datos personales **anonimizando**, no destruyendo, para no romper la trazabilidad contable/legal. Hay dos acciones:

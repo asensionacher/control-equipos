@@ -29,6 +29,13 @@ model Usuario {
   dniNie          String?  @unique
   rol             Rol      @default(USUARIO)
   emailVerificado Boolean  @default(false)
+
+  // TOTP (verificación en dos pasos, basado en Authenticator/Authy/1Password).
+  // El secret se almacena cifrado con AES-256-GCM usando AUTH_SECRET como key.
+  // Es null hasta que el usuario activa el segundo factor.
+  totpSecret  String?
+  totpEnabled Boolean @default(false)
+
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

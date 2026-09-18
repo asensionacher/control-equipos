@@ -216,6 +216,32 @@ export async function cambiarRolUsuario(
   revalidatePath("/admin/usuarios");
 }
 
+/**
+ * Resetea el segundo factor (TOTP) de un usuario desde el panel admin.
+ * Caso de uso: el usuario perdió su dispositivo autenticador.
+ */
+export async function resetearTotpUsuario(
+  usuarioId: string
+): Promise<{ error?: string; success?: string }> {
+  await requireAdmin();
+  const usuario = await prisma.usuario.findUnique({
+    where: { id: usuarioId },
+    select: { id: true, totpEnabled: true, email: true, nombre: true, apellidos: true },
+  });
+  if (!usuario) return { error: "Usuario no encontrado" };
+  if (!usuario.totpEnabled) {
+    return { error: "Este usuario no tiene segundo factor activado" };
+  }
+  await prisma.usuario.update({
+    where: { id: usuarioId },
+    data: { totpEnabled: false, totpSecret: null },
+  });
+  revalidatePath(`/admin/usuarios/${usuarioId}`);
+  return {
+    success: `Segundo factor reseteado para ${usuario.nombre} ${usuario.apellidos}`,
+  };
+}
+
 // === Rol Padre ===
 export async function asignarTutorias(
   usuarioId: string,
