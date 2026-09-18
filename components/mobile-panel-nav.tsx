@@ -32,7 +32,7 @@ const gruposAdmin = [
     enlaces: [
       { href: "/admin/temporadas", label: "Temporadas" },
       { href: "/admin/configuracion", label: "Configuración" },
-      { href: "/admin/usuarios", label: "Administradores" },
+      { href: "/admin/usuarios", label: "Usuarios" },
     ],
   },
 ];
@@ -82,13 +82,13 @@ export function MobilePanelNav({ esAdmin }: { esAdmin: boolean }) {
           </div>
         ))}
         <div className="border-t pt-2">
-        <Link
-          href="/perfil"
-          onClick={cerrarMenu}
-          className="block rounded-sm px-3 py-2 text-sm hover:bg-accent"
-        >
-          Mi perfil
-        </Link>
+          <Link
+            href="/perfil"
+            onClick={cerrarMenu}
+            className="block rounded-sm px-3 py-2 text-sm hover:bg-accent"
+          >
+            Mi perfil
+          </Link>
         </div>
       </nav>
     </details>

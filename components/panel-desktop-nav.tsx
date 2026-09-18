@@ -30,7 +30,7 @@ const gruposAdmin = [
     enlaces: [
       { href: "/admin/temporadas", label: "Temporadas" },
       { href: "/admin/configuracion", label: "Configuración" },
-      { href: "/admin/usuarios", label: "Administradores" },
+      { href: "/admin/usuarios", label: "Usuarios" },
     ],
   },
 ];

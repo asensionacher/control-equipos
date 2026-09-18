@@ -63,7 +63,7 @@ export default async function UsuariosPage({ searchParams }: PageProps) {
             Lista completa de usuarios del sistema (administradores y cuentas con acceso al portal).
           </p>
         </div>
-<Button asChild>
+        <Button asChild>
           <Link href="/admin/usuarios/nuevo">
             <Plus className="h-4 w-4" />
             Nuevo usuario
@@ -94,7 +94,7 @@ export default async function UsuariosPage({ searchParams }: PageProps) {
                 value={rol === "ADMIN" ? "" : "ADMIN"}
                 variant={rol === "ADMIN" ? "default" : "outline"}
               >
-                Administradores
+                Usuarios
               </Button>
               <Button
                 type="submit"
