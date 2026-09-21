@@ -8,6 +8,10 @@ export const metadata: Metadata = {
     template: "%s | Control de Equipos",
   },
   description: "Sistema de gestión de equipos, jugadores y temporadas",
+  icons: {
+    icon: "/api/club/favicon",
+    shortcut: "/api/club/favicon",
+  },
 };
 
 export const viewport: Viewport = {
