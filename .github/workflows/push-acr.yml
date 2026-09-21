@@ -46,3 +46,10 @@ jobs:
           tags: ${{ env.ACR_LOGIN_SERVER }}/${{ env.IMAGE_NAME }}:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Trigger Azure Automation restart runbook
+        if: success()
+        run: |
+          curl --fail --show-error --silent --retry 3 --retry-delay 5 \
+            --request POST \
+            "${{ secrets.AZURE_AUTOMATION_WEBHOOK_URL }}"

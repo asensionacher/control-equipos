@@ -1,4 +1,4 @@
-import NextAuth, { type DefaultSession } from "next-auth";
+import NextAuth, { CredentialsSignin, type DefaultSession } from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
@@ -24,6 +24,10 @@ const loginSchema = z.object({
   password: z.string().min(1, "Contraseña requerida"),
   totp: z.string().optional(),
 });
+
+class RequiresTwoFactorError extends CredentialsSignin {
+  code = "requires_2fa";
+}
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
@@ -89,7 +93,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         if (usuario.totpEnabled && usuario.totpSecret) {
           if (!totp) {
-            throw new Error("REQUIRES_2FA");
+            throw new RequiresTwoFactorError();
           }
           const secret = descifrarSecret(usuario.totpSecret);
           if (!verificarTotp(secret, totp)) return null;
