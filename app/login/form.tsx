@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
+import { requiereSegundoFactor } from "./actions";
 
 export function LoginForm({
   searchParams,
@@ -63,6 +64,14 @@ export function LoginForm({
         return;
       }
       if (result?.error) {
+        const needsTwoFactor = await requiereSegundoFactor(email, password);
+        if (needsTwoFactor) {
+          setRequiresTwoFactor(true);
+          setError(
+            "Esta cuenta requiere verificación en dos pasos. Introduce el código de tu app autenticadora."
+          );
+          return;
+        }
         setError("Email, contraseña o código incorrectos");
         return;
       }
