@@ -25,8 +25,10 @@ const loginSchema = z.object({
   totp: z.string().optional(),
 });
 
-class RequiresTwoFactorError extends CredentialsSignin {
-  code = "requires_2fa";
+function requiresTwoFactorError(): CredentialsSignin {
+  const error = new CredentialsSignin();
+  error.code = "requires_2fa";
+  return error;
 }
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -93,7 +95,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         if (usuario.totpEnabled && usuario.totpSecret) {
           if (!totp) {
-            throw new RequiresTwoFactorError();
+            throw requiresTwoFactorError();
           }
           const secret = descifrarSecret(usuario.totpSecret);
           if (!verificarTotp(secret, totp)) return null;

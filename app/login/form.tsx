@@ -55,10 +55,7 @@ export function LoginForm({
         totp: requiresTwoFactor ? code : undefined,
         redirect: false,
       });
-      if (
-        result?.error === "CredentialsSignin" &&
-        result.code === "requires_2fa"
-      ) {
+      if (result?.code === "requires_2fa") {
         setRequiresTwoFactor(true);
         setError(
           "Esta cuenta requiere verificación en dos pasos. Introduce el código de tu app autenticadora."
