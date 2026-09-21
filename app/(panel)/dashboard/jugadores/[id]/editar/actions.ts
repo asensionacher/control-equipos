@@ -6,6 +6,7 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { jugadorEditTutorSchema } from "@/lib/validaciones";
 import { enviarEmail } from "@/lib/email";
+import { getLogoClubEmailUrl } from "@/lib/email-branding";
 import { PlantillaActivacionCuenta } from "@/emails/plantilla-activacion-cuenta";
 import { calcularEdad } from "@/lib/utils";
 import {
@@ -166,6 +167,7 @@ export async function editarJugadorTutor(
           diasExpiracion: DIAS_EXPIRACION,
           nombreClub: APP_NAME,
           motivo: "jugador",
+          logoUrl: await getLogoClubEmailUrl(),
         })
       );
       const resultadoEmail = await enviarEmail({

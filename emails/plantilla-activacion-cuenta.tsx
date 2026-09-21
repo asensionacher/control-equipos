@@ -5,6 +5,7 @@ import {
   Head,
   Hr,
   Html,
+  Img,
   Preview,
   Section,
   Text,
@@ -17,6 +18,7 @@ interface PlantillaActivacionCuentaProps {
   nombreClub: string;
   motivo: "padre" | "jugador" | "admin" | "usuario";
   nombreJugadorVinculado?: string;
+  logoUrl?: string;
 }
 
 export function PlantillaActivacionCuenta({
@@ -26,6 +28,7 @@ export function PlantillaActivacionCuenta({
   nombreClub,
   motivo,
   nombreJugadorVinculado,
+  logoUrl,
 }: PlantillaActivacionCuentaProps) {
   const titulo =
     motivo === "padre"
@@ -46,6 +49,11 @@ export function PlantillaActivacionCuenta({
       <Body style={main}>
         <Container style={container}>
           <Section>
+            {logoUrl && (
+              <Section style={logoContainer}>
+                <Img src={logoUrl} alt={nombreClub} width="96" style={logo} />
+              </Section>
+            )}
             <Text style={heading}>{titulo}</Text>
             <Text style={paragraph}>Hola {nombreDestino},</Text>
             <Text style={paragraph}>{textoMotivo}</Text>
@@ -86,6 +94,18 @@ const container = {
   padding: "20px 0 48px",
   marginBottom: "64px",
   maxWidth: "560px",
+};
+
+const logoContainer = {
+  textAlign: "center" as const,
+  padding: "12px 0 4px",
+};
+
+const logo = {
+  display: "inline-block",
+  maxHeight: "96px",
+  maxWidth: "120px",
+  objectFit: "contain" as const,
 };
 
 const heading = {

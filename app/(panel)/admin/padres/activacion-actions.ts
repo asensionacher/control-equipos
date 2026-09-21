@@ -6,6 +6,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { enviarEmail } from "@/lib/email";
+import { getLogoClubEmailUrl } from "@/lib/email-branding";
 import { activarCuentaSchema } from "@/lib/validaciones";
 import { PlantillaActivacionCuenta } from "@/emails/plantilla-activacion-cuenta";
 
@@ -125,6 +126,7 @@ export async function crearPadreConActivacion(
       nombreClub: APP_NAME,
       motivo: "padre",
       nombreJugadorVinculado: params.jugadorParaVincularNombre,
+      logoUrl: await getLogoClubEmailUrl(),
     })
   );
 
@@ -232,6 +234,7 @@ export async function crearActivacionParaJugadorExistente(
       diasExpiracion: DIAS_EXPIRACION,
       nombreClub: APP_NAME,
       motivo: "jugador",
+      logoUrl: await getLogoClubEmailUrl(),
     })
   );
 
@@ -386,6 +389,7 @@ export async function reenviarActivacionPadre(
       nombreClub: APP_NAME,
       motivo: "padre",
       nombreJugadorVinculado: tutoria ? `${tutoria.jugador.nombre} ${tutoria.jugador.apellidos}` : undefined,
+      logoUrl: await getLogoClubEmailUrl(),
     })
   );
 

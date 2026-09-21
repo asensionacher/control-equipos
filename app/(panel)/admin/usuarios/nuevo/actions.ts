@@ -7,6 +7,7 @@ import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { wizardUsuarioSchema } from "@/lib/validaciones";
 import { enviarEmail } from "@/lib/email";
+import { getLogoClubEmailUrl } from "@/lib/email-branding";
 import { PlantillaActivacionCuenta } from "@/emails/plantilla-activacion-cuenta";
 
 const APP_URL =
@@ -306,6 +307,7 @@ export async function crearPendingYEnviarEmail(params: {
       diasExpiracion: DIAS_EXPIRACION,
       nombreClub: APP_NAME,
       motivo: params.motivo ?? "usuario",
+      logoUrl: await getLogoClubEmailUrl(),
     })
   );
 
