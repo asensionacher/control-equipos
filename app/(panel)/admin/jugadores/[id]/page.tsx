@@ -6,16 +6,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { calcularEdad, formatearFecha, formatearNumeroRecibo, iniciales } from "@/lib/utils";
+import { calcularEdad, formatearFecha, iniciales } from "@/lib/utils";
 import Link from "next/link";
-import { Pencil, Mail, Users, Trophy, ExternalLink, UserPlus, FileText } from "lucide-react";
+import { Pencil, Mail, Users, Trophy, ExternalLink, UserPlus } from "lucide-react";
 import { EliminarJugadorButton } from "./eliminar-button";
 import { EliminarJugadorRGPDButton } from "./eliminar-rgpd-button";
-import { AsignarEquipos } from "./asignar-equipos";
 import { CrearActivacionJugador } from "./crear-activacion-jugador";
 import { getDatosPersonales } from "@/lib/jugador-sync";
-import { formatearEquiposAsignados } from "@/lib/asignacion-equipos";
 import { obtenerFotoJugadorSrc } from "@/lib/imagen-upload";
+import { GestionarEquiposModal } from "./gestionar-equipos-modal";
+import { EstadoGestionesJugador } from "./estado-gestiones";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -44,17 +44,20 @@ export default async function FichaJugadorPage({ params }: PageProps) {
       },
       recibosJugador: {
         include: {
-          recibo: {
-            include: {
-              equipo: { include: { temporada: true } },
-              equipos: { include: { temporada: true } },
-            },
-          },
+          recibo: true,
         },
         orderBy: [
           { recibo: { fechaEmision: "desc" } },
           { numero: "desc" },
         ],
+      },
+      documentosSolicitados: {
+        include: { solicitud: true },
+        orderBy: { createdAt: "desc" },
+      },
+      consentimientos: {
+        include: { consentimiento: true },
+        orderBy: { createdAt: "desc" },
       },
     },
   });
@@ -75,6 +78,9 @@ export default async function FichaJugadorPage({ params }: PageProps) {
   });
 
   const equiposAsignadosIds = new Set(jugador.asignaciones.map((a) => a.equipoId));
+  const equiposActivosAsignados = jugador.asignaciones.filter(
+    ({ equipo }) => equipo.activo && equipo.temporada.activa
+  );
 
   const asignacionesPorTemporada = new Map<
     string,
@@ -281,26 +287,74 @@ export default async function FichaJugadorPage({ params }: PageProps) {
         </Card>
       )}
 
+      <EstadoGestionesJugador
+        recibos={jugador.recibosJugador.map((asignacion) => ({
+          id: asignacion.id,
+          reciboId: asignacion.reciboId,
+          numero: asignacion.numero,
+          concepto: asignacion.recibo.concepto,
+          fechaEmision: asignacion.recibo.fechaEmision,
+          total: asignacion.recibo.total.toString(),
+          estado: asignacion.estado,
+        }))}
+        documentos={jugador.documentosSolicitados.map((asignacion) => ({
+          id: asignacion.id,
+          solicitudId: asignacion.solicitudId,
+          nombre: asignacion.solicitud.nombre,
+          createdAt: asignacion.createdAt,
+          estado: asignacion.estado,
+        }))}
+        consentimientos={jugador.consentimientos.map((asignacion) => ({
+          id: asignacion.id,
+          consentimientoId: asignacion.consentimientoId,
+          titulo: asignacion.consentimiento.titulo,
+          createdAt: asignacion.createdAt,
+          estado: asignacion.estado,
+          revocadoAt: asignacion.revocadoAt,
+        }))}
+      />
+
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Equipos asignados
-          </CardTitle>
-          <CardDescription>
-            Marca los equipos en los que juega en las temporadas activas
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AsignarEquipos
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div className="space-y-1.5">
+            <CardTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              Equipos actuales
+            </CardTitle>
+            <CardDescription>
+              Equipos de las temporadas activas
+            </CardDescription>
+          </div>
+          <GestionarEquiposModal
             jugadorId={jugador.id}
             temporadas={temporadas.map((t) => ({
               id: t.id,
               nombre: t.nombre,
-              equipos: t.equipos.map((e) => ({ id: e.id, nombre: e.nombre, categoria: e.categoria })),
+              equipos: t.equipos.map((e) => ({
+                id: e.id,
+                nombre: e.nombre,
+                categoria: e.categoria,
+              })),
             }))}
             equiposAsignadosIds={Array.from(equiposAsignadosIds)}
           />
+        </CardHeader>
+        <CardContent>
+          {equiposActivosAsignados.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              El jugador no está asignado a ningún equipo activo.
+            </p>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              {equiposActivosAsignados.map(({ id: asignacionId, equipo }) => (
+                <Button key={asignacionId} asChild variant="outline" size="sm">
+                  <Link href={`/admin/equipos/${equipo.id}`}>
+                    {equipo.nombre} · {equipo.temporada.nombre}
+                  </Link>
+                </Button>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -358,60 +412,6 @@ export default async function FichaJugadorPage({ params }: PageProps) {
         </Card>
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Recibos asignados
-          </CardTitle>
-          <CardDescription>
-            Todos los recibos emitidos a este jugador, del más nuevo al más antiguo
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {jugador.recibosJugador.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
-              Este jugador no tiene recibos asignados todavía.
-            </p>
-          ) : (
-            <ul className="space-y-2">
-              {jugador.recibosJugador.map((rj) => (
-                <li key={rj.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
-                  <div>
-                    <Link href={`/admin/recibos/${rj.reciboId}`} className="font-medium hover:underline">
-                      {formatearNumeroRecibo(rj.numero)} · {rj.recibo.concepto}
-                    </Link>
-                    <div className="text-xs text-muted-foreground">
-                      {formatearFecha(rj.recibo.fechaEmision)}
-                      {formatearEquiposAsignados(rj.recibo) && (
-                        <> · {formatearEquiposAsignados(rj.recibo)}</>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{rj.recibo.total.toString()} €</span>
-                    <Badge
-                      variant={
-                        rj.estado === "PAGADO"
-                          ? "success"
-                          : rj.estado === "ANULADO"
-                          ? "destructive"
-                          : "warning"
-                      }
-                    >
-                      {rj.estado === "PAGADO"
-                        ? "Pagado"
-                        : rj.estado === "ANULADO"
-                        ? "Anulado"
-                        : "Pendiente"}
-                    </Badge>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 }
