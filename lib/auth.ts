@@ -33,36 +33,6 @@ function requiresTwoFactorError(): CredentialsSignin {
 
 export const { handlers, signIn, signOut, auth } = NextAuth({
   ...authConfig,
-  callbacks: {
-    async jwt({ token, user }) {
-      if (user) {
-        const u = user as {
-          id: string;
-          rol: Rol;
-          nombre: string;
-          apellidos: string;
-          twoFactorStatus?: "none" | "complete";
-        };
-        token.id = u.id;
-        token.rol = u.rol;
-        token.nombre = u.nombre;
-        token.apellidos = u.apellidos;
-        token.twoFactorStatus = u.twoFactorStatus ?? "complete";
-      }
-      return token;
-    },
-    async session({ session, token }) {
-      if (token && session.user) {
-        session.user.id = token.id as string;
-        session.user.rol = token.rol as Rol;
-        session.user.nombre = token.nombre as string;
-        session.user.apellidos = token.apellidos as string;
-        session.user.twoFactorStatus =
-          (token.twoFactorStatus as "none" | "complete" | undefined) ?? "complete";
-      }
-      return session;
-    },
-  },
   providers: [
     Credentials({
       name: "credentials",
