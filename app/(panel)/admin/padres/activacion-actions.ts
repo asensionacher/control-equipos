@@ -339,11 +339,7 @@ export async function reenviarActivacionPadre(
   if (!usuario.email) {
     return { error: "Este usuario no tiene email. Asígnale uno primero." };
   }
-
-  await prisma.pendingRegistration.updateMany({
-    where: { email: usuario.email, usado: false },
-    data: { usado: true, fechaUso: new Date() },
-  });
+  const email = usuario.email;
 
   const tutoria = await prisma.tutoria.findFirst({
     where: { usuarioId: usuario.id, esPrincipal: true },
@@ -362,16 +358,22 @@ export async function reenviarActivacionPadre(
     };
   }
 
-  const pending = await prisma.pendingRegistration.create({
-    data: {
-      email: usuario.email,
-      nombre: usuario.nombre,
-      apellidos: usuario.apellidos,
-      telefono: usuario.telefono,
-      jugadorParaVincular: tutoria?.jugadorId ?? null,
-      creadoPorId: session.user.id,
-      expiresAt: new Date(Date.now() + DIAS_EXPIRACION * 24 * 60 * 60 * 1000),
-    },
+  const pending = await prisma.$transaction(async (tx) => {
+    await tx.pendingRegistration.deleteMany({
+      where: { email },
+    });
+
+    return tx.pendingRegistration.create({
+      data: {
+        email,
+        nombre: usuario.nombre,
+        apellidos: usuario.apellidos,
+        telefono: usuario.telefono,
+        jugadorParaVincular: tutoria?.jugadorId ?? null,
+        creadoPorId: session.user.id,
+        expiresAt: new Date(Date.now() + DIAS_EXPIRACION * 24 * 60 * 60 * 1000),
+      },
+    });
   });
 
   const urlActivacion = `${APP_URL}/activar-cuenta/${pending.token}`;
@@ -402,4 +404,3 @@ export async function reenviarActivacionPadre(
 
   return { success: `Email de activación reenviado a ${usuario.email}` };
 }
-
