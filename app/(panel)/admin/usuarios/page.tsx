@@ -74,7 +74,7 @@ export default async function UsuariosPage({ searchParams }: PageProps) {
       <Card>
         <CardHeader>
           <CardTitle>Buscar</CardTitle>
-          <CardDescription>Busca por nombre, apellidos, email, DNI o teléfono. Filtra por rol.</CardDescription>
+          <CardDescription>Busca por nombre, apellidos, email, DNI o teléfono.</CardDescription>
         </CardHeader>
         <CardContent>
           <form className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -87,30 +87,11 @@ export default async function UsuariosPage({ searchParams }: PageProps) {
                 className="pl-9"
               />
             </div>
-            <div className="flex gap-2">
-              <Button
-                type="submit"
-                name="rol"
-                value={rol === "ADMIN" ? "" : "ADMIN"}
-                variant={rol === "ADMIN" ? "default" : "outline"}
-              >
-                Usuarios
+            {(rol || texto) && (
+              <Button asChild variant="ghost">
+                <Link href="/admin/usuarios">Limpiar</Link>
               </Button>
-              <Button
-                type="submit"
-                name="rol"
-                value={rol === "USUARIO" ? "" : "USUARIO"}
-                variant={rol === "USUARIO" ? "default" : "outline"}
-              >
-                Usuarios
-              </Button>
-              {(rol || texto) && (
-                <Button asChild variant="ghost">
-                  <Link href="/admin/usuarios">Limpiar</Link>
-                </Button>
-              )}
-            </div>
-            <input type="hidden" name="rol" value="" />
+            )}
           </form>
         </CardContent>
       </Card>

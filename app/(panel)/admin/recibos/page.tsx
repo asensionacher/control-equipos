@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { formatearFecha, formatearNumero, formatearNumeroRecibo } from "@/lib/utils";
 import Link from "next/link";
 import { Plus, FileText, AlertCircle, CheckCircle2, XCircle, Download } from "lucide-react";
-import { obtenerEquiposAsignados } from "@/lib/asignacion-equipos";
+import { EquiposAsignadosCeldas } from "@/components/equipos-asignados-celda";
 
 export const dynamic = "force-dynamic";
 
@@ -131,7 +131,6 @@ export default async function RecibosPage({ searchParams }: PageProps) {
                 {recibos.map((r) => {
                   const totalJugadores = r._count.jugadores;
                   const pagados = r.jugadores.filter((j) => j.estado === "PAGADO").length;
-                  const equipos = obtenerEquiposAsignados(r);
                   const numeros = r.jugadores
                     .map(({ numero }) => numero)
                     .sort((a, b) => a - b);
@@ -153,17 +152,7 @@ export default async function RecibosPage({ searchParams }: PageProps) {
                         )}
                       </TableCell>
                       <TableCell className="hidden md:table-cell">
-                        {equipos.length > 0 ? (
-                          <div className="flex max-w-52 flex-wrap gap-1">
-                            {equipos.map((equipo) => (
-                              <Badge key={equipo.id} variant="secondary">
-                                {equipo.nombre}
-                              </Badge>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Individual</span>
-                        )}
+                        <EquiposAsignadosCeldas origen={r} fallbackVacio="Individual" />
                       </TableCell>
                       <TableCell className="hidden sm:table-cell font-medium">
                         {formatearNumero(r.total)} €

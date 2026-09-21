@@ -4,11 +4,10 @@ import { FileText, Plus } from "lucide-react";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { formatearFecha } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { obtenerEquiposAsignados } from "@/lib/asignacion-equipos";
+import { EquiposAsignadosCeldas } from "@/components/equipos-asignados-celda";
 
 export const dynamic = "force-dynamic";
 
@@ -67,7 +66,6 @@ export default async function DocumentosAdminPage() {
                 {solicitudes.map((solicitud) => {
                   const validados = solicitud.jugadores.filter((j) => j.estado === "VALIDADO").length;
                   const subidos = solicitud.jugadores.filter((j) => j.estado === "SUBIDO").length;
-                  const equipos = obtenerEquiposAsignados(solicitud);
                   return (
                     <TableRow key={solicitud.id}>
                       <TableCell>
@@ -82,15 +80,10 @@ export default async function DocumentosAdminPage() {
                         )}
                       </TableCell>
                       <TableCell className="hidden sm:table-cell">
-                        {equipos.length > 0 ? (
-                          <div className="flex max-w-52 flex-wrap gap-1">
-                            {equipos.map((equipo) => (
-                              <Badge key={equipo.id} variant="secondary">{equipo.nombre}</Badge>
-                            ))}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-muted-foreground">Jugadores concretos</span>
-                        )}
+                        <EquiposAsignadosCeldas
+                          origen={solicitud}
+                          fallbackVacio="Jugadores concretos"
+                        />
                       </TableCell>
                       <TableCell className="hidden md:table-cell">
                         {formatearFecha(solicitud.createdAt)}

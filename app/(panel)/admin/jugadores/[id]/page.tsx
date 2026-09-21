@@ -327,16 +327,23 @@ export default async function FichaJugadorPage({ params }: PageProps) {
           </div>
           <GestionarEquiposModal
             jugadorId={jugador.id}
-            temporadas={temporadas.map((t) => ({
-              id: t.id,
-              nombre: t.nombre,
-              equipos: t.equipos.map((e) => ({
+            equiposAsignados={jugador.asignaciones
+              .filter(({ equipo }) => equipo.activo && equipo.temporada.activa)
+              .map((a) => ({
+                asignacionId: a.id,
+                equipoId: a.equipo.id,
+                nombre: a.equipo.nombre,
+                categoria: a.equipo.categoria,
+                temporada: a.equipo.temporada.nombre,
+              }))}
+            equiposDisponibles={temporadas.flatMap((t) =>
+              t.equipos.map((e) => ({
                 id: e.id,
                 nombre: e.nombre,
                 categoria: e.categoria,
-              })),
-            }))}
-            equiposAsignadosIds={Array.from(equiposAsignadosIds)}
+                temporada: t.nombre,
+              }))
+            )}
           />
         </CardHeader>
         <CardContent>

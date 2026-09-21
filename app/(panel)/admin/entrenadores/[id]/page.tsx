@@ -6,8 +6,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { ArrowLeft, Pencil } from "lucide-react";
+import { ArrowLeft, Pencil, Users } from "lucide-react";
 import { formatearFecha, iniciales } from "@/lib/utils";
+import { ROLES_ENTRENADOR } from "@/lib/validaciones";
 import { GestionEquiposEntrenador } from "./gestion-equipos";
 import { EliminarEntrenadorButton } from "./eliminar-button";
 
@@ -52,7 +53,12 @@ export default async function FichaEntrenadorPage({ params }: PageProps) {
       NOT: { id: { in: Array.from(idsAsignados) } },
     },
     orderBy: [{ temporada: { fechaInicio: "desc" } }, { nombre: "asc" }],
-    select: { id: true, nombre: true, categoria: true },
+    select: {
+      id: true,
+      nombre: true,
+      categoria: true,
+      temporada: { select: { nombre: true } },
+    },
   });
 
   return (
@@ -174,12 +180,14 @@ export default async function FichaEntrenadorPage({ params }: PageProps) {
             entrenadorId={entrenador.id}
             equiposAsignados={entrenador.equipos.map((a) => ({
               asignacionId: a.id,
-              id: a.equipo.id,
+              equipoId: a.equipo.id,
               nombre: a.equipo.nombre,
               categoria: a.equipo.categoria,
               temporada: a.equipo.temporada?.nombre ?? null,
+              rol: a.rol,
             }))}
             equiposDisponibles={equiposDisponiblesRaw}
+            roles={ROLES_ENTRENADOR}
           />
         </CardContent>
       </Card>

@@ -160,7 +160,8 @@ export async function editarEntrenador(
 
 export async function asignarEquiposEntrenador(
   entrenadorId: string,
-  equiposIds: string[]
+  equiposIds: string[],
+  rol: string = "ENTRENADOR_PRINCIPAL"
 ): Promise<{ error?: string; success?: string }> {
   await requireAdmin();
   const entrenador = await prisma.entrenador.findUnique({
@@ -169,6 +170,9 @@ export async function asignarEquiposEntrenador(
   });
   if (!entrenador) return { error: "Entrenador no encontrado" };
 
+  const ids = Array.from(new Set(equiposIds.filter(Boolean)));
+  if (ids.length === 0) return { success: "Sin cambios" };
+
   const temporadas = await prisma.temporada.findMany({
     where: { activa: true },
     select: { id: true },
@@ -176,23 +180,21 @@ export async function asignarEquiposEntrenador(
   const temporadaActivaId = temporadas[0]?.id ?? null;
 
   const existentes = await prisma.entrenadorEquipo.findMany({
-    where: { entrenadorId },
-    select: { equipoId: true },
+    where: { entrenadorId, equipoId: { in: ids } },
+    select: { equipoId: true, rol: true },
   });
-  const existentesSet = new Set(existentes.map((e) => e.equipoId));
-  const nuevosIds = equiposIds.filter(
-    (equipoId) => equipoId && !existentesSet.has(equipoId)
-  );
+  const existentesSet = new Set(existentes.map((e) => `${e.equipoId}::${e.rol}`));
+  const nuevos = ids
+    .filter((equipoId) => !existentesSet.has(`${equipoId}::${rol}`))
+    .map((equipoId) => ({
+      entrenadorId,
+      equipoId,
+      rol,
+      temporadaId: temporadaActivaId,
+    }));
 
-  if (nuevosIds.length > 0) {
-    await prisma.entrenadorEquipo.createMany({
-      data: nuevosIds.map((equipoId) => ({
-        entrenadorId,
-        equipoId,
-        rol: "ENTRENADOR_PRINCIPAL",
-        temporadaId: temporadaActivaId,
-      })),
-    });
+  if (nuevos.length > 0) {
+    await prisma.entrenadorEquipo.createMany({ data: nuevos });
   }
   revalidatePath(`/admin/entrenadores/${entrenadorId}`);
   revalidatePath("/admin/equipos");

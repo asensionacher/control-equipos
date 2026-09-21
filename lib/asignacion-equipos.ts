@@ -4,6 +4,8 @@ type EquipoAsignado = {
   temporada?: { nombre: string } | null;
 };
 
+export type { EquipoAsignado };
+
 export function obtenerEquiposAsignados(origen: {
   equipo?: EquipoAsignado | null;
   equipos?: EquipoAsignado[];
