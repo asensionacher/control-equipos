@@ -31,9 +31,14 @@ interface JugadorDisponible {
 interface Props {
   equipoId: string;
   jugadoresDisponibles: JugadorDisponible[];
+  onAssigned?: () => void;
 }
 
-export function AsignacionMasiva({ equipoId, jugadoresDisponibles }: Props) {
+export function AsignacionMasiva({
+  equipoId,
+  jugadoresDisponibles,
+  onAssigned,
+}: Props) {
   const router = useRouter();
   const [seleccionados, setSeleccionados] = useState<Set<string>>(new Set());
   const [busqueda, setBusqueda] = useState("");
@@ -87,6 +92,7 @@ export function AsignacionMasiva({ equipoId, jugadoresDisponibles }: Props) {
       await asignarJugadoresMasivo(equipoId, jugadorIds);
       setSeleccionados(new Set());
       setMsg({ tipo: "success", texto: `${jugadorIds.length} jugador(es) asignado(s) correctamente` });
+      onAssigned?.();
       router.refresh();
     });
   }
@@ -99,6 +105,7 @@ export function AsignacionMasiva({ equipoId, jugadoresDisponibles }: Props) {
       setConfirmacion(null);
       setSeleccionados(new Set());
       setMsg({ tipo: "success", texto: `${jugadorIds.length} jugador(es) asignado(s) correctamente` });
+      onAssigned?.();
       router.refresh();
     });
   }

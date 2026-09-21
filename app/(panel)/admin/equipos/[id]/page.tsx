@@ -8,11 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { ArrowLeft, Pencil, ExternalLink } from "lucide-react";
 import { calcularEdad, iniciales } from "@/lib/utils";
-import { AsignacionMasiva } from "./asignacion-masiva";
 import { obtenerFotoJugadorSrc } from "@/lib/imagen-upload";
 import { HorariosEntrenamiento } from "@/components/horarios-entrenamiento";
 import { UserCog } from "lucide-react";
 import { AsignarEntrenadorModal } from "./asignar-entrenador-modal";
+import { AsignarJugadoresModal } from "./asignar-jugadores-modal";
 
 interface PageProps {
   params: Promise<{ id: string }>;
@@ -180,11 +180,17 @@ export default async function FichaEquipoPage({ params }: PageProps) {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Jugadores asignados</CardTitle>
-          <CardDescription>
-            {equipo.asignaciones.length} jugador{equipo.asignaciones.length === 1 ? "" : "es"}
-          </CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <div className="space-y-1.5">
+            <CardTitle>Jugadores asignados</CardTitle>
+            <CardDescription>
+              {equipo.asignaciones.length} jugador{equipo.asignaciones.length === 1 ? "" : "es"}
+            </CardDescription>
+          </div>
+          <AsignarJugadoresModal
+            equipoId={equipo.id}
+            jugadoresDisponibles={jugadoresDisponibles}
+          />
         </CardHeader>
         <CardContent>
           {equipo.asignaciones.length === 0 ? (
@@ -214,21 +220,6 @@ export default async function FichaEquipoPage({ params }: PageProps) {
               ))}
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Asignación masiva de jugadores</CardTitle>
-          <CardDescription>
-            Selecciona varios jugadores y asígnalos a este equipo de una sola vez
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AsignacionMasiva
-            equipoId={equipo.id}
-            jugadoresDisponibles={jugadoresDisponibles}
-          />
         </CardContent>
       </Card>
     </div>
