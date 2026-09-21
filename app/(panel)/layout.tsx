@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth, signOut } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
@@ -9,8 +10,9 @@ import { LogOut, User } from "lucide-react";
 import { getConfiguracionClub } from "@/lib/club-utils";
 
 export default async function PanelLayout({ children }: { children: React.ReactNode }) {
-  const session = await auth();
+  const [session, requestHeaders] = await Promise.all([auth(), headers()]);
   if (!session?.user) redirect("/login");
+  const pathname = requestHeaders.get("x-pathname");
 
   // Verificar que el usuario de la sesión realmente existe en la BD.
   // Esto cubre el caso de JWT obsoleto tras un reset de BD.
@@ -31,7 +33,7 @@ export default async function PanelLayout({ children }: { children: React.ReactN
   // Los administradores deben tener verificación en dos pasos activada para
   // acceder a cualquier ruta protegida. Forzamos paso por /perfil para que la
   // activen antes de poder seguir navegando.
-  if (esAdmin && !usuarioExiste.totpEnabled) {
+  if (esAdmin && !usuarioExiste.totpEnabled && pathname !== "/perfil") {
     redirect("/perfil?forceTotp=1");
   }
 
