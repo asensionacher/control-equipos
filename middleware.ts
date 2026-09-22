@@ -15,6 +15,8 @@ export default auth((req) => {
     nextUrl.pathname.startsWith("/registro") ||
     nextUrl.pathname.startsWith("/recuperar-password") ||
     nextUrl.pathname.startsWith("/activar-cuenta");
+  const permiteRenovarSesion =
+    nextUrl.pathname === "/login" && nextUrl.searchParams.has("expired");
 
   if (esRutaProtegida && !isLoggedIn) {
     const url = new URL("/login", nextUrl.origin);
@@ -26,7 +28,10 @@ export default auth((req) => {
     return NextResponse.redirect(new URL("/dashboard", nextUrl.origin));
   }
 
-  if (esRutaAuth && isLoggedIn) {
+  if (esRutaAuth && isLoggedIn && !permiteRenovarSesion) {
+    if (isAdmin && req.auth?.user.twoFactorStatus === "setup_required") {
+      return NextResponse.redirect(new URL("/perfil?forceTotp=1", nextUrl.origin));
+    }
     return NextResponse.redirect(
       new URL(isAdmin ? "/admin" : "/dashboard", nextUrl.origin)
     );

@@ -10,7 +10,32 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
-import { requiereSegundoFactor } from "./actions";
+import { prepararLogin } from "./actions";
+import { obtenerRutaLocalSegura } from "@/lib/safe-redirect";
+
+function mensajeInicial(params: {
+  registered?: string;
+  reset?: string;
+  activated?: string;
+  expired?: string;
+  mfa?: string;
+}): string | null {
+  if (params.reset) {
+    return "Contraseña actualizada. Inicia sesión con tu nueva contraseña.";
+  }
+  if (params.registered) return "Cuenta creada correctamente. Inicia sesión.";
+  if (params.activated) {
+    return "Cuenta activada correctamente. Inicia sesión con la contraseña que acabas de elegir.";
+  }
+  if (params.mfa === "enabled") {
+    return "Verificación en dos pasos activada. Inicia sesión de nuevo.";
+  }
+  if (params.mfa === "disabled") {
+    return "Verificación en dos pasos desactivada. Inicia sesión de nuevo.";
+  }
+  if (params.expired) return "Tu sesión ha caducado. Inicia sesión de nuevo.";
+  return null;
+}
 
 export function LoginForm({
   searchParams,
@@ -18,7 +43,7 @@ export function LoginForm({
   tieneLogo,
   colorPrimario,
 }: {
-  searchParams: Promise<{ callbackUrl?: string; error?: string; registered?: string; reset?: string; activated?: string; expired?: string }>;
+  searchParams: Promise<{ callbackUrl?: string; error?: string; registered?: string; reset?: string; activated?: string; expired?: string; mfa?: string }>;
   nombreClub: string;
   tieneLogo: boolean;
   colorPrimario: string;
@@ -31,18 +56,9 @@ export function LoginForm({
   const [error, setError] = useState<string | null>(
     params.error ? "Credenciales inválidas" : null
   );
-  const [success, setSuccess] = useState<string | null>(
-    params.reset
-      ? "Contraseña actualizada. Inicia sesión con tu nueva contraseña."
-      : params.registered
-        ? "Cuenta creada correctamente. Inicia sesión."
-        : params.activated
-          ? "Cuenta activada correctamente. Inicia sesión con la contraseña que acabas de elegir."
-          : params.expired
-            ? "Tu sesión ha caducado. Inicia sesión de nuevo."
-            : null
-  );
+  const [success, setSuccess] = useState<string | null>(mensajeInicial(params));
   const [requiresTwoFactor, setRequiresTwoFactor] = useState(false);
+  const [defaultDestination, setDefaultDestination] = useState("/");
   const [isPending, startTransition] = useTransition();
 
   async function handleSubmit(e: React.FormEvent) {
@@ -50,6 +66,24 @@ export function LoginForm({
     setError(null);
     setSuccess(null);
     startTransition(async () => {
+      let destination = defaultDestination;
+      if (!requiresTwoFactor) {
+        const preparation = await prepararLogin(email, password);
+        if (!preparation.valid) {
+          setError("Email, contraseña o código incorrectos");
+          return;
+        }
+        setDefaultDestination(preparation.redirectTo);
+        destination = preparation.redirectTo;
+        if (preparation.requiresTwoFactor) {
+          setRequiresTwoFactor(true);
+          setError(
+            "Esta cuenta requiere verificación en dos pasos. Introduce el código de tu app autenticadora."
+          );
+          return;
+        }
+      }
+
       const result = await signIn("credentials", {
         email,
         password,
@@ -64,18 +98,14 @@ export function LoginForm({
         return;
       }
       if (result?.error) {
-        const needsTwoFactor = await requiereSegundoFactor(email, password);
-        if (needsTwoFactor) {
-          setRequiresTwoFactor(true);
-          setError(
-            "Esta cuenta requiere verificación en dos pasos. Introduce el código de tu app autenticadora."
-          );
-          return;
-        }
         setError("Email, contraseña o código incorrectos");
         return;
       }
-      router.push(params.callbackUrl ?? "/");
+      router.push(
+        params.callbackUrl
+          ? obtenerRutaLocalSegura(params.callbackUrl)
+          : destination
+      );
       router.refresh();
     });
   }

@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Copy, Loader2, ShieldCheck, ShieldOff } from "lucide-react";
+import { signOut } from "next-auth/react";
 import {
   confirmarTotp,
   desactivarTotpPropio,
@@ -30,6 +31,7 @@ export function TotpPanel({
   >(null);
   const [code, setCode] = useState("");
   const [password, setPassword] = useState("");
+  const [disableCode, setDisableCode] = useState("");
   const [msg, setMsg] = useState<{ tipo: "success" | "error"; texto: string } | null>(
     null
   );
@@ -37,8 +39,14 @@ export function TotpPanel({
 
   function handleIniciar() {
     setMsg(null);
+    if (!password) {
+      setMsg({ tipo: "error", texto: "Introduce tu contraseña para continuar" });
+      return;
+    }
+    const fd = new FormData();
+    fd.set("passwordActual", password);
     startTransition(async () => {
-      const res = await iniciarSetupTotp();
+      const res = await iniciarSetupTotp(fd);
       if (res.error) {
         setMsg({ tipo: "error", texto: res.error });
         return;
@@ -46,6 +54,7 @@ export function TotpPanel({
       if (res.setup) {
         setSetup({ qrDataUrl: res.setup.qrDataUrl, secret: res.setup.secret });
         setEstado("setup");
+        setPassword("");
       }
     });
   }
@@ -63,6 +72,10 @@ export function TotpPanel({
         return;
       }
       setMsg({ tipo: "success", texto: res.success ?? "Activado" });
+      if (res.reauthenticate) {
+        await signOut({ callbackUrl: "/login?mfa=enabled" });
+        return;
+      }
       setEstado("on");
       setSetup(null);
       setCode("");
@@ -84,6 +97,7 @@ export function TotpPanel({
     }
     const fd = new FormData();
     fd.set("passwordActual", password);
+    fd.set("codigoTotp", disableCode);
     startTransition(async () => {
       const res = await desactivarTotpPropio(fd);
       if (res.error) {
@@ -91,8 +105,13 @@ export function TotpPanel({
         return;
       }
       setMsg({ tipo: "success", texto: res.success ?? "Desactivado" });
+      if (res.reauthenticate) {
+        await signOut({ callbackUrl: "/login?mfa=disabled" });
+        return;
+      }
       setEstado("off");
       setPassword("");
+      setDisableCode("");
     });
   }
 
@@ -123,10 +142,22 @@ export function TotpPanel({
         )}
 
         {estado === "off" && (
-          <Button onClick={handleIniciar} disabled={isPending}>
-            {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-            Activar verificación en dos pasos
-          </Button>
+          <div className="space-y-3">
+            <Label htmlFor="passwordEnable">
+              Confirma con tu contraseña
+            </Label>
+            <Input
+              id="passwordEnable"
+              type="password"
+              autoComplete="current-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <Button onClick={handleIniciar} disabled={isPending || !password}>
+              {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              Activar verificación en dos pasos
+            </Button>
+          </div>
         )}
 
         {estado === "setup" && setup && (
@@ -234,11 +265,25 @@ export function TotpPanel({
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />
+                <Label htmlFor="totpDisable">
+                  Código actual de la app autenticadora
+                </Label>
+                <Input
+                  id="totpDisable"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  maxLength={6}
+                  pattern="\d{6}"
+                  value={disableCode}
+                  onChange={(e) =>
+                    setDisableCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                  }
+                />
                 <Button
                   type="button"
                   variant="destructive"
                   onClick={handleDesactivar}
-                  disabled={isPending || !password}
+                  disabled={isPending || !password || disableCode.length !== 6}
                 >
                   {isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
                   Desactivar

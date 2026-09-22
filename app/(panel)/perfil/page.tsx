@@ -1,4 +1,4 @@
-import { auth } from "@/lib/auth";
+import { authForMfaSetup } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -17,7 +17,7 @@ interface PageProps {
 export const dynamic = "force-dynamic";
 
 export default async function PerfilPage({ searchParams }: PageProps) {
-  const session = await auth();
+  const session = await authForMfaSetup();
   if (!session?.user) redirect("/login");
   const { forceTotp } = await searchParams;
 
@@ -32,6 +32,9 @@ export default async function PerfilPage({ searchParams }: PageProps) {
   ]);
 
   if (!usuario) redirect("/login");
+  const requiereSetupMfa =
+    usuario.rol === "ADMIN" &&
+    (!usuario.totpEnabled || session.user.twoFactorStatus !== "complete");
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -62,40 +65,46 @@ export default async function PerfilPage({ searchParams }: PageProps) {
         </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Datos personales</CardTitle>
-          <CardDescription>Actualiza tu información de contacto</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <PerfilForm
-            usuario={{
-              nombre: usuario.nombre,
-              apellidos: usuario.apellidos,
-              email: usuario.email,
-              telefono: usuario.telefono,
-              telefonoAlternativo: usuario.telefonoAlternativo,
-            }}
-          />
-        </CardContent>
-      </Card>
+      {!requiereSetupMfa && (
+        <>
+          <Card>
+            <CardHeader>
+              <CardTitle>Datos personales</CardTitle>
+              <CardDescription>Actualiza tu información de contacto</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PerfilForm
+                usuario={{
+                  nombre: usuario.nombre,
+                  apellidos: usuario.apellidos,
+                  email: usuario.email,
+                  telefono: usuario.telefono,
+                  telefonoAlternativo: usuario.telefonoAlternativo,
+                }}
+              />
+            </CardContent>
+          </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Cambiar contraseña</CardTitle>
-          <CardDescription>
-            Introduce tu contraseña actual para confirmar el cambio
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <CambioPasswordForm />
-        </CardContent>
-      </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>Cambiar contraseña</CardTitle>
+              <CardDescription>
+                Introduce tu contraseña actual para confirmar el cambio
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <CambioPasswordForm />
+            </CardContent>
+          </Card>
+        </>
+      )}
 
       <TotpPanel
         inicial={{ totpEnabled: usuario.totpEnabled }}
         nombreClub={club.nombre}
-        forzado={forceTotp === "1" && usuario.rol === "ADMIN"}
+        forzado={
+          requiereSetupMfa && (forceTotp === "1" || usuario.rol === "ADMIN")
+        }
       />
     </div>
   );

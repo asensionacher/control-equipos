@@ -2,7 +2,7 @@
 
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
-import { auth } from "@/lib/auth";
+import { auth, authForMfaSetup } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { perfilUsuarioSchema, cambioPasswordSchema } from "@/lib/validaciones";
 import { sincronizarDatosPersonalesUsuario } from "@/lib/jugador-sync";
@@ -14,9 +14,21 @@ import {
   generarOtpAuthUri,
   verificarTotp,
 } from "@/lib/totp";
+import {
+  limpiarFallosAutenticacion,
+  registrarAuditoriaSeguridad,
+  registrarFalloAutenticacion,
+} from "@/lib/auth-security";
+import { notificarCambioSeguridad } from "@/lib/security-notification";
 
 async function requireUser() {
   const session = await auth();
+  if (!session?.user) throw new Error("No autorizado");
+  return session;
+}
+
+async function requireMfaSetupUser() {
+  const session = await authForMfaSetup();
   if (!session?.user) throw new Error("No autorizado");
   return session;
 }
@@ -60,7 +72,7 @@ export async function actualizarPerfil(
 
 export async function cambiarPassword(
   formData: FormData
-): Promise<{ error?: string; success?: string }> {
+): Promise<{ error?: string; success?: string; reauthenticate?: boolean }> {
   const session = await requireUser();
 
   const parsed = cambioPasswordSchema.safeParse({
@@ -84,10 +96,23 @@ export async function cambiarPassword(
   const passwordHash = await bcrypt.hash(parsed.data.passwordNueva, 10);
   await prisma.usuario.update({
     where: { id: session.user.id },
-    data: { passwordHash },
+    data: { passwordHash, authVersion: { increment: 1 } },
+  });
+  await registrarAuditoriaSeguridad({
+    accion: "CAMBIO_PASSWORD_PROPIO",
+    ejecutadoPorId: session.user.id,
+    usuarioAfectadoId: session.user.id,
+  });
+  await notificarCambioSeguridad({
+    email: usuario.email,
+    nombre: usuario.nombre,
+    descripcion: "Se ha cambiado la contraseña de tu cuenta.",
   });
 
-  return { success: "Contraseña actualizada correctamente" };
+  return {
+    success: "Contraseña actualizada. Vuelve a iniciar sesión.",
+    reauthenticate: true,
+  };
 }
 
 // ============================================================================
@@ -106,16 +131,37 @@ interface TotpSetupResult {
  * el usuario verifique el primer código. Devuelve el QR y el secret en claro
  * para que la UI lo muestre UNA sola vez.
  */
-export async function iniciarSetupTotp(): Promise<
+export async function iniciarSetupTotp(formData: FormData): Promise<
   { error?: string; setup?: TotpSetupResult }
 > {
-  const session = await requireUser();
+  const session = await requireMfaSetupUser();
+  const passwordActual = String(formData.get("passwordActual") ?? "");
+  if (!passwordActual) return { error: "Introduce tu contraseña actual" };
   const usuario = await prisma.usuario.findUnique({
     where: { id: session.user.id },
-    select: { email: true, totpEnabled: true, nombre: true, apellidos: true },
+    select: {
+      id: true,
+      email: true,
+      passwordHash: true,
+      authLockedUntil: true,
+      totpEnabled: true,
+      nombre: true,
+      apellidos: true,
+    },
   });
   if (!usuario) return { error: "Usuario no encontrado" };
   if (!usuario.email) return { error: "Tu usuario no tiene email asociado" };
+  if (usuario.authLockedUntil && usuario.authLockedUntil > new Date()) {
+    return { error: "Demasiados intentos. Espera 15 minutos antes de reintentarlo." };
+  }
+  if (
+    !usuario.passwordHash ||
+    !(await bcrypt.compare(passwordActual, usuario.passwordHash))
+  ) {
+    await registrarFalloAutenticacion(usuario.id);
+    return { error: "La contraseña actual no es correcta" };
+  }
+  await limpiarFallosAutenticacion(usuario.id);
   if (usuario.totpEnabled) {
     return { error: "El segundo factor ya está activado" };
   }
@@ -144,28 +190,66 @@ export async function iniciarSetupTotp(): Promise<
  */
 export async function confirmarTotp(
   code: string
-): Promise<{ error?: string; success?: string }> {
-  const session = await requireUser();
+): Promise<{ error?: string; success?: string; reauthenticate?: boolean }> {
+  const session = await requireMfaSetupUser();
   const usuario = await prisma.usuario.findUnique({
     where: { id: session.user.id },
-    select: { totpSecret: true, totpEnabled: true },
+    select: {
+      totpSecret: true,
+      totpEnabled: true,
+      authVersion: true,
+      authLockedUntil: true,
+      email: true,
+      nombre: true,
+    },
   });
   if (!usuario || !usuario.totpSecret) {
     return { error: "Inicia primero el proceso de activación" };
+  }
+  if (usuario.authLockedUntil && usuario.authLockedUntil > new Date()) {
+    return { error: "Demasiados intentos. Espera 15 minutos antes de reintentarlo." };
   }
   if (usuario.totpEnabled) {
     return { error: "El segundo factor ya está activado" };
   }
   const secret = descifrarSecret(usuario.totpSecret);
-  if (!verificarTotp(secret, code)) {
+  const verification = verificarTotp(secret, code);
+  if (!verification.valid || verification.timeStep == null) {
+    await registrarFalloAutenticacion(session.user.id);
     return { error: "Código incorrecto. Comprueba la hora del dispositivo." };
   }
-  await prisma.usuario.update({
-    where: { id: session.user.id },
-    data: { totpEnabled: true },
+  const updated = await prisma.usuario.updateMany({
+    where: {
+      id: session.user.id,
+      authVersion: usuario.authVersion,
+      totpEnabled: false,
+    },
+    data: {
+      totpEnabled: true,
+      lastAcceptedTotpStep: verification.timeStep,
+      authVersion: { increment: 1 },
+      authFailedAttempts: 0,
+      authLockedUntil: null,
+    },
+  });
+  if (updated.count !== 1) {
+    return { error: "La configuración cambió. Inicia el proceso de nuevo." };
+  }
+  await registrarAuditoriaSeguridad({
+    accion: "MFA_ACTIVADO",
+    ejecutadoPorId: session.user.id,
+    usuarioAfectadoId: session.user.id,
+  });
+  await notificarCambioSeguridad({
+    email: usuario.email,
+    nombre: usuario.nombre,
+    descripcion: "Se ha activado la verificación en dos pasos de tu cuenta.",
   });
   revalidatePath("/perfil");
-  return { success: "Verificación en dos pasos activada" };
+  return {
+    success: "Verificación en dos pasos activada. Vuelve a iniciar sesión.",
+    reauthenticate: true,
+  };
 }
 
 /**
@@ -174,25 +258,86 @@ export async function confirmarTotp(
  */
 export async function desactivarTotpPropio(
   formData: FormData
-): Promise<{ error?: string; success?: string }> {
+): Promise<{ error?: string; success?: string; reauthenticate?: boolean }> {
   const session = await requireUser();
   const passwordActual = String(formData.get("passwordActual") ?? "");
+  const codigoTotp = String(formData.get("codigoTotp") ?? "");
   if (!passwordActual) return { error: "Introduce tu contraseña actual" };
+  if (!/^\d{6}$/.test(codigoTotp)) {
+    return { error: "Introduce el código actual de tu app autenticadora" };
+  }
 
   const usuario = await prisma.usuario.findUnique({
     where: { id: session.user.id },
-    select: { passwordHash: true, totpEnabled: true },
+    select: {
+      passwordHash: true,
+      totpEnabled: true,
+      totpSecret: true,
+      lastAcceptedTotpStep: true,
+      authVersion: true,
+      authLockedUntil: true,
+      email: true,
+      nombre: true,
+    },
   });
   if (!usuario || !usuario.passwordHash) return { error: "Usuario no encontrado" };
   if (!usuario.totpEnabled) return { error: "El segundo factor no está activado" };
+  if (usuario.authLockedUntil && usuario.authLockedUntil > new Date()) {
+    return { error: "Demasiados intentos. Espera 15 minutos antes de reintentarlo." };
+  }
 
   const ok = await bcrypt.compare(passwordActual, usuario.passwordHash);
-  if (!ok) return { error: "La contraseña actual no es correcta" };
+  if (!ok) {
+    await registrarFalloAutenticacion(session.user.id);
+    return { error: "La contraseña actual no es correcta" };
+  }
+  if (!usuario.totpSecret) return { error: "Configuración TOTP incompleta" };
 
-  await prisma.usuario.update({
-    where: { id: session.user.id },
-    data: { totpEnabled: false, totpSecret: null },
+  const verification = verificarTotp(
+    descifrarSecret(usuario.totpSecret),
+    codigoTotp,
+    usuario.lastAcceptedTotpStep
+  );
+  if (!verification.valid || verification.timeStep == null) {
+    await registrarFalloAutenticacion(session.user.id);
+    return { error: "El código TOTP es incorrecto o ya se ha utilizado" };
+  }
+
+  const updated = await prisma.usuario.updateMany({
+    where: {
+      id: session.user.id,
+      authVersion: usuario.authVersion,
+      totpEnabled: true,
+      OR: [
+        { lastAcceptedTotpStep: null },
+        { lastAcceptedTotpStep: { lt: verification.timeStep } },
+      ],
+    },
+    data: {
+      totpEnabled: false,
+      totpSecret: null,
+      lastAcceptedTotpStep: null,
+      authVersion: { increment: 1 },
+      authFailedAttempts: 0,
+      authLockedUntil: null,
+    },
+  });
+  if (updated.count !== 1) {
+    return { error: "El código TOTP es incorrecto o ya se ha utilizado" };
+  }
+  await registrarAuditoriaSeguridad({
+    accion: "MFA_DESACTIVADO_PROPIO",
+    ejecutadoPorId: session.user.id,
+    usuarioAfectadoId: session.user.id,
+  });
+  await notificarCambioSeguridad({
+    email: usuario.email,
+    nombre: usuario.nombre,
+    descripcion: "Se ha desactivado la verificación en dos pasos de tu cuenta.",
   });
   revalidatePath("/perfil");
-  return { success: "Verificación en dos pasos desactivada" };
+  return {
+    success: "Verificación en dos pasos desactivada. Vuelve a iniciar sesión.",
+    reauthenticate: true,
+  };
 }

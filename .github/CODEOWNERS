@@ -1,0 +1,7 @@
+* @v-sergia_microsoft
+
+/.github/ @v-sergia_microsoft
+/lib/auth.ts @v-sergia_microsoft
+/lib/auth.config.ts @v-sergia_microsoft
+/lib/totp.ts @v-sergia_microsoft
+/prisma/schema.prisma @v-sergia_microsoft

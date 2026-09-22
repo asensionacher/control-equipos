@@ -4,7 +4,19 @@ import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "./prisma";
 import { authConfig } from "./auth.config";
-import { descifrarSecret, verificarTotp } from "./totp";
+import {
+  cifrarSecret,
+  descifrarSecret,
+  esSecretTotpLegacy,
+  verificarTotp,
+} from "./totp";
+import {
+  assertSecureAuthSecret,
+  DUMMY_PASSWORD_HASH,
+  estaBloqueado,
+  limpiarFallosAutenticacion,
+  registrarFalloAutenticacion,
+} from "./auth-security";
 import type { Rol } from "@prisma/client";
 
 declare module "next-auth" {
@@ -14,7 +26,9 @@ declare module "next-auth" {
       rol: Rol;
       nombre: string;
       apellidos: string;
-      twoFactorStatus: "none" | "complete";
+      authVersion: number;
+      twoFactorStatus: "none" | "setup_required" | "complete";
+      mfaVerifiedAt?: number;
     } & DefaultSession["user"];
   }
 }
@@ -31,7 +45,7 @@ function requiresTwoFactorError(): CredentialsSignin {
   return error;
 }
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
+const nextAuth = NextAuth({
   ...authConfig,
   providers: [
     Credentials({
@@ -42,6 +56,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         totp: { label: "Código de verificación", type: "text" },
       },
       async authorize(credentials) {
+        assertSecureAuthSecret();
         const parsed = loginSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
@@ -49,10 +64,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         const usuario = await prisma.usuario.findUnique({
           where: { email: email.toLowerCase() },
         });
-        if (!usuario || !usuario.passwordHash) return null;
+        if (!usuario || !usuario.passwordHash) {
+          await bcrypt.compare(password, DUMMY_PASSWORD_HASH);
+          return null;
+        }
+        if (estaBloqueado(usuario)) return null;
+        if (usuario.totpEnabled && !usuario.totpSecret) return null;
 
         const passwordValido = await bcrypt.compare(password, usuario.passwordHash);
-        if (!passwordValido) return null;
+        if (!passwordValido) {
+          await registrarFalloAutenticacion(usuario.id);
+          return null;
+        }
 
         const baseUser = {
           id: usuario.id,
@@ -60,7 +83,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           nombre: usuario.nombre,
           apellidos: usuario.apellidos,
           rol: usuario.rol,
-          twoFactorStatus: "complete" as const,
+          authVersion: usuario.authVersion,
         };
 
         if (usuario.totpEnabled && usuario.totpSecret) {
@@ -68,12 +91,98 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             throw requiresTwoFactorError();
           }
           const secret = descifrarSecret(usuario.totpSecret);
-          if (!verificarTotp(secret, totp)) return null;
-          return baseUser;
+          const verification = verificarTotp(
+            secret,
+            totp,
+            usuario.lastAcceptedTotpStep
+          );
+          if (!verification.valid || verification.timeStep == null) {
+            await registrarFalloAutenticacion(usuario.id);
+            return null;
+          }
+          const consumed = await prisma.usuario.updateMany({
+            where: {
+              id: usuario.id,
+              authVersion: usuario.authVersion,
+              OR: [
+                { lastAcceptedTotpStep: null },
+                { lastAcceptedTotpStep: { lt: verification.timeStep } },
+              ],
+            },
+            data: {
+              lastAcceptedTotpStep: verification.timeStep,
+              ...(esSecretTotpLegacy(usuario.totpSecret)
+                ? { totpSecret: cifrarSecret(secret) }
+                : {}),
+            },
+          });
+          if (consumed.count !== 1) return null;
+          await limpiarFallosAutenticacion(usuario.id);
+          return {
+            ...baseUser,
+            twoFactorStatus: "complete" as const,
+            mfaVerifiedAt: Date.now(),
+          };
         }
 
-        return baseUser;
+        await limpiarFallosAutenticacion(usuario.id);
+        return {
+          ...baseUser,
+          twoFactorStatus:
+            usuario.rol === "ADMIN"
+              ? ("setup_required" as const)
+              : ("none" as const),
+        };
       },
     }),
   ],
 });
+
+export const { handlers, signIn, signOut } = nextAuth;
+const rawAuth = nextAuth.auth;
+
+async function getCurrentSession(allowAdminMfaSetup: boolean) {
+  assertSecureAuthSecret();
+  const session = await rawAuth();
+  if (!session?.user?.id) return null;
+
+  const usuario = await prisma.usuario.findUnique({
+    where: { id: session.user.id },
+    select: {
+      rol: true,
+      authVersion: true,
+      totpEnabled: true,
+    },
+  });
+  if (
+    !usuario ||
+    usuario.rol !== session.user.rol ||
+    usuario.authVersion !== session.user.authVersion
+  ) {
+    return null;
+  }
+
+  if (
+    usuario.totpEnabled &&
+    session.user.twoFactorStatus !== "complete"
+  ) {
+    return null;
+  }
+  if (
+    usuario.rol === "ADMIN" &&
+    !usuario.totpEnabled &&
+    !allowAdminMfaSetup
+  ) {
+    return null;
+  }
+
+  return session;
+}
+
+export function auth() {
+  return getCurrentSession(false);
+}
+
+export function authForMfaSetup() {
+  return getCurrentSession(true);
+}

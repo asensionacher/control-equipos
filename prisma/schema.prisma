@@ -18,41 +18,68 @@ enum Rol {
 }
 
 model Usuario {
-  id              String   @id @default(cuid())
-  email           String?  @unique
-  passwordHash    String?
-  nombre          String
-  apellidos       String
-  telefono        String?
+  id                  String    @id @default(cuid())
+  email               String?   @unique
+  passwordHash        String?
+  nombre              String
+  apellidos           String
+  telefono            String?
   telefonoAlternativo String?
-  fechaNacimiento DateTime?
-  dniNie          String?  @unique
-  rol             Rol      @default(USUARIO)
-  emailVerificado Boolean  @default(false)
+  fechaNacimiento     DateTime?
+  dniNie              String?   @unique
+  rol                 Rol       @default(USUARIO)
+  emailVerificado     Boolean   @default(false)
 
   // TOTP (verificación en dos pasos, basado en Authenticator/Authy/1Password).
-  // El secret se almacena cifrado con AES-256-GCM usando AUTH_SECRET como key.
+  // El secret se almacena cifrado con AES-256-GCM usando TOTP_ENCRYPTION_KEY.
   // Es null hasta que el usuario activa el segundo factor.
-  totpSecret  String?
-  totpEnabled Boolean @default(false)
+  totpSecret           String?
+  totpEnabled          Boolean @default(false)
+  lastAcceptedTotpStep Int?
 
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  // Incrementar ante cualquier cambio de credenciales, rol o MFA invalida
+  // inmediatamente todos los JWT emitidos con una versión anterior.
+  authVersion        Int       @default(0)
+  authFailedAttempts Int       @default(0)
+  authLockedUntil    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relaciones
-  tutorias                     Tutoria[]               @relation("TutorUsuarios")
-  jugadorComoUsuario           Jugador?                @relation("JugadorComoUsuario")
-  entrenadorComoUsuario        Entrenador?             @relation("EntrenadorComoUsuario")
-  invitacionesCreadas          Invitacion[]            @relation("AdminCreadorInvitacion")
-  invitacionesRecibidas        Invitacion[]            @relation("UsuarioInvitado")
-  passwordResetTokens          PasswordResetToken[]
-  pendingRegistrationsCreadas  PendingRegistration[]   @relation("AdminCreadorPendingReg")
-  recibosCreados               Recibo[]                @relation("ReciboCreador")
-  solicitudesDocumentosCreadas SolicitudDocumento[]    @relation("SolicitudDocumentoCreador")
-  consentimientosCreados       Consentimiento[]        @relation("ConsentimientoCreador")
-  consentimientosFirmados      ConsentimientoJugador[] @relation("ConsentimientoFirmante")
-  entrenadoresCreados          Entrenador[]            @relation("EntrenadorCreador")
-  auditoriasRGPD               AuditoriaRGPD[]         @relation("AuditoriaRGPD Ejecutor")
+  tutorias                      Tutoria[]               @relation("TutorUsuarios")
+  jugadorComoUsuario            Jugador?                @relation("JugadorComoUsuario")
+  entrenadorComoUsuario         Entrenador?             @relation("EntrenadorComoUsuario")
+  invitacionesCreadas           Invitacion[]            @relation("AdminCreadorInvitacion")
+  invitacionesRecibidas         Invitacion[]            @relation("UsuarioInvitado")
+  passwordResetTokens           PasswordResetToken[]
+  pendingRegistrationsCreadas   PendingRegistration[]   @relation("AdminCreadorPendingReg")
+  recibosCreados                Recibo[]                @relation("ReciboCreador")
+  solicitudesDocumentosCreadas  SolicitudDocumento[]    @relation("SolicitudDocumentoCreador")
+  consentimientosCreados        Consentimiento[]        @relation("ConsentimientoCreador")
+  consentimientosFirmados       ConsentimientoJugador[] @relation("ConsentimientoFirmante")
+  entrenadoresCreados           Entrenador[]            @relation("EntrenadorCreador")
+  auditoriasRGPD                AuditoriaRGPD[]         @relation("AuditoriaRGPD Ejecutor")
+  auditoriasSeguridadEjecutadas AuditoriaSeguridad[]    @relation("AuditoriaSeguridad Ejecutor")
+  auditoriasSeguridadAfectadas  AuditoriaSeguridad[]    @relation("AuditoriaSeguridad Afectado")
+}
+
+model AuditoriaSeguridad {
+  id String @id @default(cuid())
+
+  accion  String
+  detalle Json?
+
+  ejecutadoPorId String?
+  ejecutadoPor   Usuario? @relation("AuditoriaSeguridad Ejecutor", fields: [ejecutadoPorId], references: [id], onDelete: SetNull)
+
+  usuarioAfectadoId String?
+  usuarioAfectado   Usuario? @relation("AuditoriaSeguridad Afectado", fields: [usuarioAfectadoId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([usuarioAfectadoId, createdAt])
 }
 
 model NotificacionPendiente {
@@ -82,17 +109,17 @@ enum Sexo {
 }
 
 model Jugador {
-  id              String   @id @default(cuid())
-  nombre          String
-  apellidos       String
-  fechaNacimiento DateTime
-  dniNie          String?  @unique
-  email           String?
-  telefono        String?
+  id                  String   @id @default(cuid())
+  nombre              String
+  apellidos           String
+  fechaNacimiento     DateTime
+  dniNie              String?  @unique
+  email               String?
+  telefono            String?
   telefonoAlternativo String?
-  direccion       String?
-  fotoUrl         String?
-  sexo            Sexo?
+  direccion           String?
+  fotoUrl             String?
+  sexo                Sexo?
 
   // Si el jugador es adulto y tiene cuenta propia, este campo apunta a su Usuario.
   // En ese caso, los datos personales del jugador (nombre, apellidos, email, teléfono)
@@ -113,7 +140,7 @@ model Jugador {
   recibosJugador        ReciboJugador[]
   documentosSolicitados SolicitudDocumentoJugador[]
   consentimientos       ConsentimientoJugador[]
-  entrenadorComoJugador Entrenador?             @relation("EntrenadorComoJugador")
+  entrenadorComoJugador Entrenador?                 @relation("EntrenadorComoJugador")
 
   @@index([apellidos, nombre])
   @@index([fechaNacimiento])
@@ -222,7 +249,7 @@ model Temporada {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  equipos          Equipo[]
+  equipos           Equipo[]
   entrenadorEquipos EntrenadorEquipo[]
 }
 
@@ -279,32 +306,32 @@ model HorarioEntrenamiento {
 // Entrenador del club. Una persona puede ser entrenador y a la vez
 // jugador (Entrenador.jugadorId) o tener cuenta de acceso (Entrenador.usuarioId).
 model Entrenador {
-  id            String  @id @default(cuid())
-  nombre        String
-  apellidos     String
-  email         String?
-  telefono      String?
+  id                  String  @id @default(cuid())
+  nombre              String
+  apellidos           String
+  email               String?
+  telefono            String?
   telefonoAlternativo String?
-  observaciones String?
+  observaciones       String?
 
   // Cuenta de acceso opcional. Si se vincula, el usuario puede ver su portal
   // desde /dashboard / /dashboard/entrenador sin necesidad de ser admin.
-  usuario        Usuario? @relation("EntrenadorComoUsuario", fields: [usuarioId], references: [id], onDelete: SetNull)
-  usuarioId      String?  @unique
+  usuario   Usuario? @relation("EntrenadorComoUsuario", fields: [usuarioId], references: [id], onDelete: SetNull)
+  usuarioId String?  @unique
 
   // Ficha de jugador opcional. Si este entrenador también juega como
   // jugador en algún equipo del club, podemos vincular su Jugador.
-  jugador        Jugador? @relation("EntrenadorComoJugador", fields: [jugadorId], references: [id], onDelete: SetNull)
-  jugadorId      String?  @unique
+  jugador   Jugador? @relation("EntrenadorComoJugador", fields: [jugadorId], references: [id], onDelete: SetNull)
+  jugadorId String?  @unique
 
-  activo         Boolean  @default(true)
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  creadoPor      Usuario? @relation("EntrenadorCreador", fields: [creadoPorId], references: [id], onDelete: SetNull)
-  creadoPorId    String?
+  creadoPor   Usuario? @relation("EntrenadorCreador", fields: [creadoPorId], references: [id], onDelete: SetNull)
+  creadoPorId String?
 
-  equipos        EntrenadorEquipo[]
+  equipos EntrenadorEquipo[]
 
   @@index([apellidos, nombre])
   @@index([activo])
@@ -314,23 +341,23 @@ model Entrenador {
 // Si la asignación caduca (fechaHasta) o cambia de temporada, se elimina esta fila
 // y se crea una nueva en vez de mantener histórico histórico.
 model EntrenadorEquipo {
-  id            String     @id @default(cuid())
-  entrenador    Entrenador @relation(fields: [entrenadorId], references: [id], onDelete: Cascade)
-  entrenadorId  String
-  equipo        Equipo     @relation(fields: [equipoId], references: [id], onDelete: Cascade)
-  equipoId      String
+  id           String     @id @default(cuid())
+  entrenador   Entrenador @relation(fields: [entrenadorId], references: [id], onDelete: Cascade)
+  entrenadorId String
+  equipo       Equipo     @relation(fields: [equipoId], references: [id], onDelete: Cascade)
+  equipoId     String
 
   // Rol dentro del cuerpo técnico del equipo
-  rol           String     @default("ENTRENADOR_PRINCIPAL")
+  rol String @default("ENTRENADOR_PRINCIPAL")
   // "ENTRENADOR_PRINCIPAL" | "ENTRENADOR_AYUDANTE" | "PREPARADOR_FISICO" | "COORDINADOR"
 
   // Opcional: atado a una temporada concreta. Si es null, la asignación
   // es independiente de la temporada (cualquier temporada activa).
-  temporada     Temporada? @relation(fields: [temporadaId], references: [id], onDelete: SetNull)
-  temporadaId   String?
+  temporada   Temporada? @relation(fields: [temporadaId], references: [id], onDelete: SetNull)
+  temporadaId String?
 
   observaciones String?
-  createdAt     DateTime   @default(now())
+  createdAt     DateTime @default(now())
 
   @@unique([entrenadorId, equipoId, rol])
   @@index([entrenadorId])
@@ -604,7 +631,7 @@ model ConsentimientoJugador {
   // Revocación del consentimiento (RGPD o manual).
   // Si está poblado, el consentimiento firmado se considera revocado en esta fecha,
   // aunque conservamos el PDF firmado en S3 como prueba legal del consentimiento original.
-  revocadoAt    DateTime?
+  revocadoAt     DateTime?
   revocadoMotivo String? // "ELIMINACION_RGPD" | "REVOCACION_MANUAL" | ...
 
   createdAt DateTime @default(now())
@@ -626,16 +653,16 @@ model AuditoriaRGPD {
   id String @id @default(cuid())
 
   // Snapshot del sujeto afectado (no FK, sobrevive al borrado del Usuario/Jugador).
-  sujetoTipo         String // "USUARIO" | "JUGADOR" | "ENTRENADOR"
-  sujetoAfectadoId   String
-  sujetoAfectadoEmail String?
+  sujetoTipo           String // "USUARIO" | "JUGADOR" | "ENTRENADOR"
+  sujetoAfectadoId     String
+  sujetoAfectadoEmail  String?
   sujetoAfectadoNombre String?
 
   ejecutadoPorId String?
   ejecutadoPor   Usuario? @relation("AuditoriaRGPD Ejecutor", fields: [ejecutadoPorId], references: [id], onDelete: SetNull)
 
-  accion  String // "ELIMINACION_USUARIO_RGPD" | "ELIMINACION_JUGADOR_RGPD" | ...
-  detalle Json   // entidades afectadas (ids), nº consentimientos revocados, etc.
+  accion    String // "ELIMINACION_USUARIO_RGPD" | "ELIMINACION_JUGADOR_RGPD" | ...
+  detalle   Json // entidades afectadas (ids), nº consentimientos revocados, etc.
   createdAt DateTime @default(now())
 
   @@index([createdAt])

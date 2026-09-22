@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { enviarEmail } from "@/lib/email";
 import { recuperarPasswordSchema, resetPasswordSchema } from "@/lib/validaciones";
 import { PlantillaResetPassword } from "../../../emails/plantilla-reset-password";
+import { notificarCambioSeguridad } from "@/lib/security-notification";
 
 const APP_URL = process.env.AUTH_URL ?? process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? "Control de Equipos";
@@ -116,13 +117,24 @@ export async function resetearPassword(
   await prisma.$transaction([
     prisma.usuario.update({
       where: { id: tokenRecord.usuarioId },
-      data: { passwordHash },
+      data: { passwordHash, authVersion: { increment: 1 } },
     }),
     prisma.passwordResetToken.update({
       where: { id: tokenRecord.id },
       data: { usado: true, fechaUso: new Date() },
     }),
+    prisma.auditoriaSeguridad.create({
+      data: {
+        accion: "PASSWORD_RESTABLECIDA",
+        usuarioAfectadoId: tokenRecord.usuarioId,
+      },
+    }),
   ]);
+  await notificarCambioSeguridad({
+    email: tokenRecord.usuario.email,
+    nombre: tokenRecord.usuario.nombre,
+    descripcion: "Se ha restablecido la contraseña de tu cuenta.",
+  });
 
   return {};
 }

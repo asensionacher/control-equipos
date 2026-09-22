@@ -12,6 +12,12 @@ import { cambioPasswordAdminSchema } from "@/lib/validaciones";
 import { calcularEdad } from "@/lib/utils";
 import { deleteObject } from "@/lib/s3";
 import { crearPendingYEnviarEmail } from "../nuevo/actions";
+import {
+  registrarAuditoriaSeguridad,
+  registrarFalloAutenticacion,
+} from "@/lib/auth-security";
+import { notificarCambioSeguridad } from "@/lib/security-notification";
+import { descifrarSecret, verificarTotp } from "@/lib/totp";
 
 const APP_NAME = process.env.NEXT_PUBLIC_APP_NAME ?? "Control de Equipos";
 
@@ -25,11 +31,11 @@ export async function actualizarDatosUsuario(
   usuarioId: string,
   formData: FormData
 ): Promise<{ error?: string; success?: string; emailCambiado?: boolean }> {
-  await requireAdmin();
+  const session = await requireAdmin();
 
   const usuarioActual = await prisma.usuario.findUnique({
     where: { id: usuarioId },
-    select: { id: true, email: true },
+    select: { id: true, email: true, rol: true },
   });
   if (!usuarioActual) return { error: "Usuario no encontrado" };
 
@@ -73,6 +79,7 @@ export async function actualizarDatosUsuario(
   }
 
   const emailCambiado = emailRaw !== (usuarioActual.email ?? "");
+  const rolCambiado = rol !== usuarioActual.rol;
   const seHaAnadidoEmail = !!emailRaw && !!usuarioActual.email === false;
 
   await prisma.usuario.update({
@@ -91,12 +98,22 @@ export async function actualizarDatosUsuario(
       ...(emailCambiado
         ? { passwordHash: null, emailVerificado: false }
         : {}),
+      ...(emailCambiado || rolCambiado
+        ? { authVersion: { increment: 1 } }
+        : {}),
     },
   });
+  if (emailCambiado || rolCambiado) {
+    await registrarAuditoriaSeguridad({
+      accion: emailCambiado ? "EMAIL_USUARIO_CAMBIADO" : "ROL_CAMBIADO",
+      ejecutadoPorId: session.user.id,
+      usuarioAfectadoId: usuarioId,
+      detalle: { emailCambiado, rolAnterior: usuarioActual.rol, rolNuevo: rol },
+    });
+  }
 
   // Si el email se modificó o añadió, enviar activación al nuevo email.
   if (emailCambiado && emailRaw) {
-    const session = await auth();
     await crearPendingYEnviarEmail({
       email: emailRaw,
       nombre,
@@ -151,7 +168,7 @@ export async function cambiarPasswordUsuarioAdmin(
   usuarioId: string,
   formData: FormData
 ): Promise<{ error?: string; success?: string; warning?: string }> {
-  await requireAdmin();
+  const session = await requireAdmin();
 
   const parsed = cambioPasswordAdminSchema.safeParse({
     passwordNueva: formData.get("passwordNueva"),
@@ -174,13 +191,18 @@ export async function cambiarPasswordUsuarioAdmin(
   await prisma.$transaction([
     prisma.usuario.update({
       where: { id: usuario.id },
-      data: { passwordHash },
+      data: { passwordHash, authVersion: { increment: 1 } },
     }),
     prisma.passwordResetToken.updateMany({
       where: { usuarioId: usuario.id, usado: false },
       data: { usado: true, fechaUso: new Date() },
     }),
   ]);
+  await registrarAuditoriaSeguridad({
+    accion: "PASSWORD_CAMBIADA_ADMIN",
+    ejecutadoPorId: session.user.id,
+    usuarioAfectadoId: usuario.id,
+  });
 
   const html = await render(
     PlantillaPasswordCambiadaAdmin({
@@ -210,8 +232,17 @@ export async function cambiarRolUsuario(
   usuarioId: string,
   rol: "ADMIN" | "USUARIO"
 ) {
-  await requireAdmin();
-  await prisma.usuario.update({ where: { id: usuarioId }, data: { rol } });
+  const session = await requireAdmin();
+  await prisma.usuario.update({
+    where: { id: usuarioId },
+    data: { rol, authVersion: { increment: 1 } },
+  });
+  await registrarAuditoriaSeguridad({
+    accion: "ROL_CAMBIADO",
+    ejecutadoPorId: session.user.id,
+    usuarioAfectadoId: usuarioId,
+    detalle: { rol },
+  });
   revalidatePath(`/admin/usuarios/${usuarioId}`);
   revalidatePath("/admin/usuarios");
 }
@@ -221,20 +252,113 @@ export async function cambiarRolUsuario(
  * Caso de uso: el usuario perdió su dispositivo autenticador.
  */
 export async function resetearTotpUsuario(
-  usuarioId: string
+  usuarioId: string,
+  codigoTotp: string
 ): Promise<{ error?: string; success?: string }> {
-  await requireAdmin();
-  const usuario = await prisma.usuario.findUnique({
-    where: { id: usuarioId },
-    select: { id: true, totpEnabled: true, email: true, nombre: true, apellidos: true },
-  });
+  const session = await requireAdmin();
+  if (
+    !session.user.mfaVerifiedAt ||
+    Date.now() - session.user.mfaVerifiedAt > 15 * 60_000
+  ) {
+    return {
+      error:
+        "Por seguridad, vuelve a iniciar sesión con MFA antes de resetear el segundo factor.",
+    };
+  }
+  const [usuario, administrador] = await Promise.all([
+    prisma.usuario.findUnique({
+      where: { id: usuarioId },
+      select: {
+        id: true,
+        totpEnabled: true,
+        email: true,
+        nombre: true,
+        apellidos: true,
+      },
+    }),
+    prisma.usuario.findUnique({
+      where: { id: session.user.id },
+      select: {
+        id: true,
+        authVersion: true,
+        totpEnabled: true,
+        totpSecret: true,
+        lastAcceptedTotpStep: true,
+        authLockedUntil: true,
+      },
+    }),
+  ]);
   if (!usuario) return { error: "Usuario no encontrado" };
   if (!usuario.totpEnabled) {
     return { error: "Este usuario no tiene segundo factor activado" };
   }
-  await prisma.usuario.update({
-    where: { id: usuarioId },
-    data: { totpEnabled: false, totpSecret: null },
+  if (
+    !administrador?.totpEnabled ||
+    !administrador.totpSecret ||
+    !/^\d{6}$/.test(codigoTotp)
+  ) {
+    return { error: "Introduce un código TOTP válido de tu cuenta de administrador" };
+  }
+  if (
+    administrador.authLockedUntil &&
+    administrador.authLockedUntil > new Date()
+  ) {
+    return { error: "Demasiados intentos. Espera 15 minutos antes de reintentarlo." };
+  }
+  const verification = verificarTotp(
+    descifrarSecret(administrador.totpSecret),
+    codigoTotp,
+    administrador.lastAcceptedTotpStep
+  );
+  if (!verification.valid || verification.timeStep == null) {
+    await registrarFalloAutenticacion(session.user.id);
+    return { error: "El código TOTP es incorrecto o ya se ha utilizado" };
+  }
+
+  const resetCompletado = await prisma.$transaction(async (tx) => {
+    const stepConsumido = await tx.usuario.updateMany({
+      where: {
+        id: administrador.id,
+        authVersion: administrador.authVersion,
+        OR: [
+          { lastAcceptedTotpStep: null },
+          { lastAcceptedTotpStep: { lt: verification.timeStep } },
+        ],
+      },
+      data: {
+        lastAcceptedTotpStep: verification.timeStep,
+        authFailedAttempts: 0,
+        authLockedUntil: null,
+      },
+    });
+    if (stepConsumido.count !== 1) return false;
+
+    await tx.usuario.update({
+      where: { id: usuarioId },
+      data: {
+        totpEnabled: false,
+        totpSecret: null,
+        lastAcceptedTotpStep: null,
+        authVersion: { increment: 1 },
+      },
+    });
+    await tx.auditoriaSeguridad.create({
+      data: {
+        accion: "MFA_RESETEADO_ADMIN",
+        ejecutadoPorId: session.user.id,
+        usuarioAfectadoId: usuarioId,
+      },
+    });
+    return true;
+  });
+  if (!resetCompletado) {
+    return { error: "El código TOTP es incorrecto o ya se ha utilizado" };
+  }
+  await notificarCambioSeguridad({
+    email: usuario.email,
+    nombre: usuario.nombre,
+    descripcion:
+      "Un administrador ha reseteado la verificación en dos pasos de tu cuenta.",
   });
   revalidatePath(`/admin/usuarios/${usuarioId}`);
   return {

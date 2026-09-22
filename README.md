@@ -34,7 +34,7 @@ Sistema web responsive para la gestión de equipos, jugadores y temporadas.
 
 ## Requisitos
 
-- Node.js 20+ y npm (para desarrollo local)
+- Node.js 22.x y npm (para desarrollo local)
 - Docker y Docker Compose (para despliegue con contenedores)
 
 ## Opción A: Docker (recomendado)
@@ -43,7 +43,8 @@ Sistema web responsive para la gestión de equipos, jugadores y temporadas.
    ```bash
    cp .env.example .env
    ```
-   Edita `.env` y rellena al menos `AUTH_SECRET` (genera uno con `openssl rand -base64 32`).
+   Edita `.env` y rellena `AUTH_SECRET` y `TOTP_ENCRYPTION_KEY` con dos valores
+   distintos (genera cada uno con `openssl rand -base64 32`).
 
    El proveedor de archivos se elige con `STORAGE_PROVIDER=s3` (predeterminado)
    o `STORAGE_PROVIDER=azure`. En Azure usa la identidad administrada de App Service:
@@ -120,7 +121,8 @@ Sistema web responsive para la gestión de equipos, jugadores y temporadas.
    Edita `.env` con tus datos:
    ```
    DATABASE_URL="postgresql://usuario:contraseña@localhost:5432/control_equipos?schema=public"
-   AUTH_SECRET="una-clave-segura-de-al-menos-32-caracteres"
+   AUTH_SECRET="una-clave-aleatoria-de-al-menos-32-caracteres"
+   TOTP_ENCRYPTION_KEY="otra-clave-aleatoria-distinta-de-al-menos-32-caracteres"
    AUTH_URL="http://localhost:3000"
    RESEND_API_KEY="re_xxxxxxx"  # Opcional pero recomendado para enviar invitaciones
    EMAIL_FROM="Control Equipos <noreply@tudominio.com>"
@@ -173,6 +175,8 @@ npm run dev          # Desarrollo
 npm run build        # Build producción
 npm run start        # Iniciar producción
 npm run lint         # Linter
+npm test             # Tests unitarios
+npm run test:coverage # Tests con cobertura
 npm run typecheck    # TypeScript check
 npm run db:push      # Sincronizar schema a la DB
 npm run db:migrate   # Crear migración
@@ -180,6 +184,35 @@ npm run db:studio    # Abrir Prisma Studio
 npm run db:seed      # Cargar datos de prueba
 npm run db:demo      # Añadir una demo completa sin enviar emails
 ```
+
+## Contribuir
+
+Las contribuciones se realizan mediante pull requests. Cada PR ejecuta una CI
+sin secretos que valida Prisma, lint, TypeScript, tests con cobertura y el build
+de producción. Consulta [CONTRIBUTING.md](CONTRIBUTING.md) antes de enviar
+cambios y [SECURITY.md](SECURITY.md) para reportar vulnerabilidades de forma
+privada.
+
+## Despliegues
+
+Los pushes y merges a `main` no despliegan automáticamente. El workflow
+`Deploy image to Azure` se ejecuta manualmente o al publicar una GitHub Release,
+y vuelve a ejecutar la CI antes de publicar la imagen en ACR.
+
+Configura en GitHub:
+
+- environment `production` con revisores obligatorios y los secretos
+  `ACR_USERNAME`, `ACR_PASSWORD` y
+  `AZURE_AUTOMATION_WEBHOOK_URL`;
+- variables opcionales `ACR_LOGIN_SERVER` y `ACR_IMAGE_NAME`.
+
+Cada despliegue publica `latest` para mantener la configuración actual de Azure
+y una etiqueta inmutable `sha-<commit>`; las releases también publican su tag.
+
+Protege también `main` desde **Settings > Rules > Rulesets**: exige pull
+requests, una aprobación, conversaciones resueltas y los checks `CI / Lint,
+types, tests and build`, `CI / Dependency review` y `CodeQL / Analyze
+JavaScript and TypeScript`.
 
 ## Estructura del proyecto
 

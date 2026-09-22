@@ -37,7 +37,7 @@ Importar `lib/auth.ts` desde el middleware revienta el build en Edge. La verific
 
 ### Verificación en dos pasos (TOTP)
 
-- Secretaría el `Usuario.totpSecret` se almacena **cifrada en BD** con AES-256-GCM (`lib/totp.ts`). La clave se deriva de `AUTH_SECRET` con SHA-256. **Rotar `AUTH_SECRET` bloquea a todos los usuarios con 2FA activado**: hay que avisarles para que reconfiguren. El reset se hace desde la ficha de usuario en `/admin/usuarios/[id]` con la acción `resetearTotpUsuario`.
+- Secretaría el `Usuario.totpSecret` se almacena **cifrada en BD** con AES-256-GCM (`lib/totp.ts`). Los secretos nuevos usan `TOTP_ENCRYPTION_KEY`; los registros legacy sin prefijo se descifran con `AUTH_SECRET` para permitir una migración progresiva. No rotar ninguna clave mientras existan secretos cifrados con ella. El reset se hace desde la ficha de usuario en `/admin/usuarios/[id]` con la acción `resetearTotpUsuario`.
 - **Obligatorio para ADMIN, opcional para el resto.** El layout `app/(panel)/layout.tsx` redirige a `/perfil?forceTotp=1` cuando un ADMIN entra sin `totpEnabled=true` en BD. Tras activar, queda libre.
 - **Activación**: el usuario hace click en "Activar" en `/perfil` → servidor genera secret, lo guarda cifrado y devuelve el QR + URI. El usuario escanea con su app autenticadora e introduce el primer código → `confirmarTotp` lo verifica y marca `totpEnabled=true`.
 - **Login**: el form `/login` pide solo email+password; si la cuenta tiene `totpEnabled`, `authorize` lanza `Error("REQUIRES_2FA")` y el form muestra el campo de código en un segundo paso sin recargar.
@@ -156,6 +156,10 @@ Si cambias el schema, **debes rebuildear la imagen** (`docker compose build app`
 - **UI components** están en `components/ui/`. No crear nuevos si ya existe uno similar.
 - **Email no editable desde el perfil** (solo admin). El campo está disabled en `/perfil`.
 - **Tutor solo lo cambia el admin** desde la ficha del jugador.
+- **Tests unitarios** usan Vitest en `tests/`. Ejecutar `npm test`; la CI exige
+  también `npm run test:coverage`, lint, typecheck y build.
+- **Despliegue Azure** no ocurre al fusionar en `main`: solo mediante ejecución
+  manual o GitHub Release, después de reutilizar el workflow de CI.
 
 ## Lo que NO debes hacer
 

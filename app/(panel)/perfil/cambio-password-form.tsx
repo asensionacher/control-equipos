@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader2 } from "lucide-react";
 import { cambiarPassword } from "./actions";
+import { signOut } from "next-auth/react";
 
 export function CambioPasswordForm() {
   const [msg, setMsg] = useState<{ tipo: "success" | "error"; texto: string } | null>(null);
@@ -20,6 +21,10 @@ export function CambioPasswordForm() {
       const result = await cambiarPassword(formData);
       if (result.error) setMsg({ tipo: "error", texto: result.error });
       else if (result.success) {
+        if (result.reauthenticate) {
+          await signOut({ callbackUrl: "/login?reset=1" });
+          return;
+        }
         setMsg({ tipo: "success", texto: result.success });
         e.currentTarget?.reset?.();
       }

@@ -290,7 +290,11 @@ export async function activarCuenta(
   if (existeUsuario) {
     usuario = await prisma.usuario.update({
       where: { id: existeUsuario.id },
-      data: { passwordHash, emailVerificado: true },
+      data: {
+        passwordHash,
+        emailVerificado: true,
+        authVersion: { increment: 1 },
+      },
     });
   } else {
     usuario = await prisma.usuario.create({

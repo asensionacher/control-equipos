@@ -2,6 +2,18 @@ const path = require("path");
 const fs = require("fs");
 const { createPrismaClient, getPrismaCliDatabaseUrl } = require("./prisma-client");
 
+function validateSecurityConfig() {
+  const placeholder = "cambia-esto-por-una-clave-segura-de-al-menos-32-caracteres";
+  for (const name of ["AUTH_SECRET", "TOTP_ENCRYPTION_KEY"]) {
+    const value = process.env[name] || "";
+    if (value.length < 32 || value === placeholder) {
+      throw new Error(
+        `${name} debe ser una clave aleatoria de al menos 32 caracteres y no puede usar el valor de ejemplo.`
+      );
+    }
+  }
+}
+
 async function waitForDb() {
   const prisma = createPrismaClient();
   const maxAttempts = 30;
@@ -68,6 +80,7 @@ async function runPrismaPush() {
 }
 
 async function main() {
+  validateSecurityConfig();
   await waitForDb();
   await runPrismaPush();
 
