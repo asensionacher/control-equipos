@@ -4,7 +4,7 @@ Instrucciones para sesiones OpenCode en este repositorio. Solo lo que no se infi
 
 ## Lo que un agente NO descubre fácilmente
 
-El README documenta stack, comandos y estructura. Antes de tocar nada, verifica contra el código actual con `git log`/`grep`, porque ese doc puede estar desactualizado. Engines: `package.json` exige Node `22.x` aunque el README mencione 20+. `postinstall` ejecuta `prisma generate` automáticamente, así que un `npm install` en frío no necesita paso extra de cliente.
+El README documenta stack, comandos y estructura. Antes de tocar nada, verifica contra el código actual con `git log`/`grep`, porque ese doc puede estar desactualizado. Engines: `package.json` exige Node `24.x`. `postinstall` ejecuta `prisma generate` automáticamente, así que un `npm install` en frío no necesita paso extra de cliente.
 
 ### `next.config.mjs` tiene dos quirks que rompen si los tocas
 
@@ -12,12 +12,12 @@ El README documenta stack, comandos y estructura. Antes de tocar nada, verifica 
 - **`experimental.serverActions.bodySizeLimit: "15mb"`** — fija el límite de subida en Server Actions (justificantes, fotos). Si subes PDFs/fotos grandes, sube esto o divide el flujo en rutas API con su propio `request.formData()`.
 - **`images.remotePatterns`** permite `https://**` — los `<Image>` no fallarán por dominio pero conviene restringir en producción.
 
-### Auth vive en dos archivos por el Edge Runtime
+### Auth vive en dos archivos y el Proxy debe seguir ligero
 
-- `lib/auth.config.ts` (30 líneas, Edge-safe, sin Prisma ni bcrypt) → lo importa `middleware.ts`.
+- `lib/auth.config.ts` (sin Prisma ni bcrypt) → lo importa `proxy.ts`.
 - `lib/auth.ts` (Credentials + Prisma) → solo server actions / API routes.
 
-Importar `lib/auth.ts` desde el middleware revienta el build en Edge. La verificación real contra BD del usuario (`session.user.id`) vive en `app/(panel)/layout.tsx:26`, no en el middleware.
+Next.js 16 ejecuta `proxy.ts` en Node.js, pero no importes allí `lib/auth.ts` ni Prisma: el Proxy se ejecuta en cada navegación y debe limitarse a validar/redirigir con los datos del JWT. La verificación real contra BD del usuario (`session.user.id`) vive en `app/(panel)/layout.tsx:26` y en los guards de servidor.
 
 ### Recibos y almacenamiento S3 (CRÍTICO)
 
@@ -167,6 +167,6 @@ Si cambias el schema, **debes rebuildear la imagen** (`docker compose build app`
 - No uses `next start` con `output: "standalone"`.
 - No agregues `passwordHash` editable en formularios del usuario (excepto admin). Va por flujo de activación + recuperación.
 - No asumas sesión válida en server actions: verifica `session.user.id` contra BD antes de usar como FK.
-- No llames `prisma` directamente desde el middleware (Edge Runtime no lo soporta).
+- No llames `prisma` directamente desde `proxy.ts`; mantén ahí solo comprobaciones basadas en el JWT.
 - No crees una sección de "datos del tutor" en fichas de jugador — el modelo nuevo usa la tabla `Tutoria` que apunta a `Usuario`.
 - No generes URLs prefirmadas de S3 para servir PDFs/justificantes al usuario. Pásalas siempre por las rutas API autenticadas (`/api/recibos/*`).

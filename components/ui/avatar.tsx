@@ -1,4 +1,3 @@
-/* eslint-disable @next/next/no-img-element */
 import { cn } from "@/lib/utils";
 
 export function Avatar({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {

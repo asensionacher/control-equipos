@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { FileText, Receipt } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -17,34 +17,45 @@ import type { SeleccionHerenciaEquipo } from "@/app/(panel)/admin/equipos/asigna
 
 export type OpcionesHerenciaEquipo = SeleccionHerenciaEquipo;
 
-export function ConfirmarHerenciaEquipo({
-  open,
-  onOpenChange,
-  resumen,
-  cantidadJugadores,
-  onConfirm,
-  isPending,
-}: {
+type ConfirmarHerenciaEquipoProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   resumen: ResumenHerenciaEquipo | null;
   cantidadJugadores: number;
   onConfirm: (opciones: OpcionesHerenciaEquipo) => void;
   isPending: boolean;
+};
+
+export function ConfirmarHerenciaEquipo(
+  props: ConfirmarHerenciaEquipoProps
+) {
+  if (!props.resumen) return null;
+
+  return (
+    <ConfirmarHerenciaEquipoContenido
+      key={`${props.resumen.recibos.map((recibo) => recibo.id).join(",")}:${props.resumen.documentos.map((documento) => documento.id).join(",")}`}
+      {...props}
+      resumen={props.resumen}
+    />
+  );
+}
+
+function ConfirmarHerenciaEquipoContenido({
+  open,
+  onOpenChange,
+  resumen,
+  cantidadJugadores,
+  onConfirm,
+  isPending,
+}: Omit<ConfirmarHerenciaEquipoProps, "resumen"> & {
+  resumen: ResumenHerenciaEquipo;
 }) {
-  const [recibosSeleccionados, setRecibosSeleccionados] = useState<Set<number>>(new Set());
-  const [documentosSeleccionados, setDocumentosSeleccionados] = useState<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (open && resumen) {
-      setRecibosSeleccionados(new Set(resumen.recibos.map((recibo) => recibo.id)));
-      setDocumentosSeleccionados(
-        new Set(resumen.documentos.map((documento) => documento.id))
-      );
-    }
-  }, [open, resumen]);
-
-  if (!resumen) return null;
+  const [recibosSeleccionados, setRecibosSeleccionados] = useState<Set<number>>(
+    () => new Set(resumen.recibos.map((recibo) => recibo.id))
+  );
+  const [documentosSeleccionados, setDocumentosSeleccionados] = useState<
+    Set<string>
+  >(() => new Set(resumen.documentos.map((documento) => documento.id)));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

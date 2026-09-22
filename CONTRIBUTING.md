@@ -11,7 +11,7 @@ repositorio.
 
 Requisitos:
 
-- Node.js 22.x
+- Node.js 24.x
 - npm
 - PostgreSQL, directamente o mediante Docker Compose
 

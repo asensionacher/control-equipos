@@ -4,7 +4,7 @@ Sistema web responsive para la gestión de equipos, jugadores y temporadas.
 
 ## Stack
 
-- **Next.js 15** (App Router, Server Actions)
+- **Next.js 16** (App Router, Server Actions)
 - **PostgreSQL** como base de datos
 - **Prisma** como ORM
 - **Auth.js v5** para autenticación con email + contraseña (bcrypt)
@@ -34,7 +34,7 @@ Sistema web responsive para la gestión de equipos, jugadores y temporadas.
 
 ## Requisitos
 
-- Node.js 22.x y npm (para desarrollo local)
+- Node.js 24.x y npm (para desarrollo local)
 - Docker y Docker Compose (para despliegue con contenedores)
 
 ## Opción A: Docker (recomendado)

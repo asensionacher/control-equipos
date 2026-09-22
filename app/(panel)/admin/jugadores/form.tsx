@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,10 +56,6 @@ export function JugadorForm({ jugador, tutores }: Props) {
   const [mensajeInvitacion, setMensajeInvitacion] = useState<string>("");
   const esMayorDeEdad =
     Boolean(fechaNacimiento) && calcularEdad(fechaNacimiento) >= 18;
-
-  useEffect(() => {
-    if (esMayorDeEdad) setTutorId("");
-  }, [esMayorDeEdad]);
 
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -152,7 +148,11 @@ export function JugadorForm({ jugador, tutores }: Props) {
                 type="date"
                 required
                 value={fechaNacimiento}
-                onChange={(event) => setFechaNacimiento(event.target.value)}
+                onChange={(event) => {
+                  const value = event.target.value;
+                  setFechaNacimiento(value);
+                  if (value && calcularEdad(value) >= 18) setTutorId("");
+                }}
               />
             </div>
             <div className="space-y-2">
