@@ -68,7 +68,7 @@ export function PlantillaInvitacion({
             {mensaje && (
               <Section style={mensajeBox}>
                 <Text style={paragraph}>
-                  <em>"{mensaje}"</em>
+                  <em>&ldquo;{mensaje}&rdquo;</em>
                 </Text>
               </Section>
             )}
