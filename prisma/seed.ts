@@ -1,7 +1,12 @@
 import { PrismaClient } from "@prisma/client";
+import { PrismaPg } from "@prisma/adapter-pg";
 import bcrypt from "bcryptjs";
 
-const prisma = new PrismaClient();
+const connectionString = process.env.DATABASE_URL?.trim();
+if (!connectionString) {
+  throw new Error("DATABASE_URL es obligatorio para ejecutar prisma/seed.ts");
+}
+const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
 async function main() {
   console.log("Iniciando seed...");
