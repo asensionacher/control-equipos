@@ -45,7 +45,14 @@ function createPrismaClient() {
     if (!connectionString) {
       throw new Error("DATABASE_URL es obligatorio con autenticación por password.");
     }
-    return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+    return new PrismaClient({
+      adapter: new PrismaPg({
+        connectionString,
+        // Defaults alineados con Prisma v6 (ver lib/prisma.ts).
+        connectionTimeoutMillis: 5_000,
+        idleTimeoutMillis: 300_000,
+      }),
+    });
   }
 
   const { entraTokenProvider } = require("@azure/postgresql-auth");
@@ -54,6 +61,8 @@ function createPrismaClient() {
     ...getAzurePostgresConfig(),
     password: entraTokenProvider(getAzureCredential()),
     max: Number(process.env.DATABASE_POOL_MAX || 10),
+    connectionTimeoutMillis: 5_000,
+    idleTimeoutMillis: 300_000,
     application_name: process.env.NEXT_PUBLIC_APP_NAME || "control-equipos",
   });
   return new PrismaClient({ adapter: new PrismaPg(pool) });
