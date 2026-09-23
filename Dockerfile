@@ -5,16 +5,20 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json package-lock.json* ./
 COPY prisma ./prisma
-RUN npm ci
+COPY prisma.config.ts ./
+RUN DATABASE_URL="postgresql://build:build@localhost:5432/build" npm ci
 
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npx prisma generate && npm run build
+RUN export DATABASE_URL="postgresql://build:build@localhost:5432/build" \
+    AUTH_SECRET="docker-build-only-auth-secret-not-used-at-runtime" \
+    && npx prisma generate \
+    && npm run build
 RUN node scripts/copy-runtime-deps.js /runtime-node_modules \
-    @prisma/adapter-pg pg @azure/identity @azure/postgresql-auth
+    prisma @prisma/adapter-pg pg @azure/identity @azure/postgresql-auth dotenv
 
 FROM base AS runner
 WORKDIR /app
@@ -26,6 +30,7 @@ COPY --from=builder /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
+COPY --from=builder --chown=nextjs:nodejs /app/prisma.config.ts ./prisma.config.ts
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/prisma ./node_modules/prisma
