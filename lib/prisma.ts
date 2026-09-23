@@ -28,7 +28,14 @@ function createPrismaClient(): PrismaClient {
   const log = process.env.NODE_ENV === "development" ? ["error", "warn"] as const : ["error"] as const;
 
   if (getDatabaseAuthMode() === "password") {
-    return new PrismaClient({ log: [...log] });
+    const connectionString = process.env.DATABASE_URL?.trim();
+    if (!connectionString) {
+      throw new Error("DATABASE_URL es obligatorio con autenticación por password.");
+    }
+    return new PrismaClient({
+      adapter: new PrismaPg({ connectionString }),
+      log: [...log],
+    });
   }
 
   const pool = new Pool({

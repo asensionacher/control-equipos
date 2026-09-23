@@ -38,9 +38,16 @@ function getAzurePostgresConfig() {
 }
 
 function createPrismaClient() {
-  if (getDatabaseAuthMode() === "password") return new PrismaClient();
-
   const { PrismaPg } = require("@prisma/adapter-pg");
+
+  if (getDatabaseAuthMode() === "password") {
+    const connectionString = (process.env.DATABASE_URL || "").trim();
+    if (!connectionString) {
+      throw new Error("DATABASE_URL es obligatorio con autenticación por password.");
+    }
+    return new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
+  }
+
   const { entraTokenProvider } = require("@azure/postgresql-auth");
   const { Pool } = require("pg");
   const pool = new Pool({
