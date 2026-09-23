@@ -26,9 +26,24 @@ function findPackageRoot(entryPath, packageName) {
 }
 
 function copyPackage(packageName, resolveFrom) {
+  if (packageName.startsWith("@types/")) return;
+
   const resolver = createRequire(path.join(resolveFrom, "__runtime-deps__.js"));
+  for (const searchPath of resolver.resolve.paths(packageName) ?? []) {
+    const packageJsonPath = path.join(searchPath, packageName, "package.json");
+    if (fs.existsSync(packageJsonPath)) {
+      const packageRoot = path.dirname(packageJsonPath);
+      const packageJson = JSON.parse(fs.readFileSync(packageJsonPath, "utf8"));
+      return copyResolvedPackage(packageName, packageRoot, packageJson);
+    }
+  }
+
   const entryPath = resolver.resolve(packageName);
   const { current: packageRoot, packageJson } = findPackageRoot(entryPath, packageName);
+  return copyResolvedPackage(packageName, packageRoot, packageJson);
+}
+
+function copyResolvedPackage(packageName, packageRoot, packageJson) {
   const relativePath = path.relative(nodeModulesRoot, packageRoot);
   if (visited.has(relativePath)) return;
   visited.add(relativePath);
